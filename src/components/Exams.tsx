@@ -1,22 +1,24 @@
 import React, { useState } from 'react';
 import { Search, Plus, Edit, Eye, Trash2, Filter, FileText, Calendar, Clock, Users } from 'lucide-react';
 import ExamModal from './ExamModal';
+import { useApiResource } from '../hooks/useApiResource';
+import { AppUser, canDelete, canManage, isVisibleForUser, scopeLabel } from '../access';
 
-const Exams = () => {
+type ExamsProps = {
+  user: AppUser;
+};
+
+const Exams: React.FC<ExamsProps> = ({ user }) => {
   const [showModal, setShowModal] = useState(false);
-  const [selectedExam, setSelectedExam] = useState(null);
+  const [selectedExam, setSelectedExam] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const { items: exams, loading, error, save, remove } = useApiResource<any>('exams');
+  const canWrite = canManage(user.role, 'exams');
+  const canRemove = canDelete(user.role);
+  const visibleExams = exams.filter((exam) => isVisibleForUser(user, exam, 'exams'));
 
-  const exams = [
-    { id: 1, title: 'Quran Recitation Assessment', course: 'Quran Memorization Level 1', grade: 'Grade 1-2', date: '2024-01-15', time: '9:00 AM', duration: 60, students: 25, status: 'Upcoming', teacher: 'Dr. Abdullah Rahman', totalMarks: 100 },
-    { id: 2, title: 'Arabic Grammar Mid-Term', course: 'Arabic Grammar Fundamentals', grade: 'Grade 3-4', date: '2024-01-16', time: '10:00 AM', duration: 90, students: 22, status: 'Upcoming', teacher: 'Ustadha Fatima Al-Zahra', totalMarks: 100 },
-    { id: 3, title: 'Islamic History Quiz', course: 'Islamic History & Civilization', grade: 'Grade 5-6', date: '2024-01-12', time: '11:30 AM', duration: 45, students: 28, status: 'Completed', teacher: 'Sheikh Omar Ibn Khalid', totalMarks: 50 },
-    { id: 4, title: 'Hadith Studies Final Exam', course: 'Hadith Studies Advanced', grade: 'Grade 7-8', date: '2024-01-18', time: '2:00 PM', duration: 120, students: 18, status: 'Upcoming', teacher: 'Ustadha Aisha Mahmoud', totalMarks: 150 },
-    { id: 5, title: 'Fiqh Practical Assessment', course: 'Fiqh & Islamic Law', grade: 'Grade 6-8', date: '2024-01-20', time: '1:00 PM', duration: 90, students: 20, status: 'Scheduled', teacher: 'Dr. Hassan Al-Qadri', totalMarks: 100 },
-  ];
-
-  const filteredExams = exams.filter(exam => {
+  const filteredExams = visibleExams.filter(exam => {
     const matchesSearch = exam.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          exam.course.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === '' || exam.status === filterStatus;
@@ -24,26 +26,30 @@ const Exams = () => {
   });
 
   const handleAddExam = () => {
+    if (!canWrite) return;
     setSelectedExam(null);
     setShowModal(true);
   };
 
-  const handleEditExam = (exam) => {
+  const handleEditExam = (exam: any) => {
+    if (!canWrite) return;
     setSelectedExam(exam);
     setShowModal(true);
   };
 
-  const handleViewExam = (exam) => {
-    console.log('View exam:', exam);
+  const handleViewExam = (exam: any) => {
+    setSelectedExam(exam);
+    setShowModal(true);
   };
 
-  const handleDeleteExam = (exam) => {
+  const handleDeleteExam = async (exam: any) => {
+    if (!canRemove) return;
     if (window.confirm(`Are you sure you want to delete ${exam.title}?`)) {
-      console.log('Delete exam:', exam);
+      await remove(exam.id);
     }
   };
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'Upcoming': return 'bg-blue-100 text-blue-800';
       case 'Scheduled': return 'bg-yellow-100 text-yellow-800';
@@ -59,15 +65,17 @@ const Exams = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Exams Management</h2>
-          <p className="text-gray-600">Schedule and manage assessments and examinations</p>
+          <p className="text-gray-600">{scopeLabel(user.role)}</p>
         </div>
-        <button
-          onClick={handleAddExam}
-          className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors flex items-center space-x-2"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Schedule Exam</span>
-        </button>
+        {canWrite && (
+          <button
+            onClick={handleAddExam}
+            className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors flex items-center space-x-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Schedule Exam</span>
+          </button>
+        )}
       </div>
 
       {/* Search and Filters */}
@@ -102,6 +110,9 @@ const Exams = () => {
         </div>
       </div>
 
+      {loading && <div className="bg-white rounded-lg p-4 text-gray-600 shadow-sm">Loading exams...</div>}
+      {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">{error}</div>}
+
       {/* Exams Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredExams.map((exam) => (
@@ -121,20 +132,24 @@ const Exams = () => {
                 >
                   <Eye className="w-4 h-4" />
                 </button>
-                <button
-                  onClick={() => handleEditExam(exam)}
-                  className="text-emerald-600 hover:text-emerald-800 p-1"
-                  title="Edit Exam"
-                >
-                  <Edit className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleDeleteExam(exam)}
-                  className="text-red-600 hover:text-red-800 p-1"
-                  title="Delete Exam"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {canWrite && (
+                  <button
+                    onClick={() => handleEditExam(exam)}
+                    className="text-emerald-600 hover:text-emerald-800 p-1"
+                    title="Edit Exam"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                )}
+                {canRemove && (
+                  <button
+                    onClick={() => handleDeleteExam(exam)}
+                    className="text-red-600 hover:text-red-800 p-1"
+                    title="Delete Exam"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -180,19 +195,19 @@ const Exams = () => {
       {/* Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-          <div className="text-2xl font-bold text-blue-600">{exams.length}</div>
-          <div className="text-sm text-gray-600">Total Exams</div>
+          <div className="text-2xl font-bold text-blue-600">{visibleExams.length}</div>
+          <div className="text-sm text-gray-600">Visible Exams</div>
         </div>
         <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-          <div className="text-2xl font-bold text-yellow-600">{exams.filter(e => e.status === 'Upcoming' || e.status === 'Scheduled').length}</div>
+          <div className="text-2xl font-bold text-yellow-600">{visibleExams.filter(e => e.status === 'Upcoming' || e.status === 'Scheduled').length}</div>
           <div className="text-sm text-gray-600">Upcoming Exams</div>
         </div>
         <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-          <div className="text-2xl font-bold text-green-600">{exams.filter(e => e.status === 'Completed').length}</div>
+          <div className="text-2xl font-bold text-green-600">{visibleExams.filter(e => e.status === 'Completed').length}</div>
           <div className="text-sm text-gray-600">Completed Exams</div>
         </div>
         <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-          <div className="text-2xl font-bold text-purple-600">{exams.reduce((sum, e) => sum + e.students, 0)}</div>
+          <div className="text-2xl font-bold text-purple-600">{visibleExams.reduce((sum, e) => sum + e.students, 0)}</div>
           <div className="text-sm text-gray-600">Total Exam Attempts</div>
         </div>
       </div>
@@ -202,8 +217,13 @@ const Exams = () => {
         <ExamModal
           exam={selectedExam}
           onClose={() => setShowModal(false)}
-          onSave={(examData) => {
-            console.log('Save exam:', examData);
+          readOnly={!canWrite}
+          onSave={async (examData) => {
+            if (!canWrite) {
+              setShowModal(false);
+              return;
+            }
+            await save(selectedExam?.id, { ...examData, institutionId: user.institutionId || 1 });
             setShowModal(false);
           }}
         />

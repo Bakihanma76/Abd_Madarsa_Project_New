@@ -7,6 +7,8 @@ interface CourseModalProps {
   onSave: (courseData: any) => void;
 }
 
+const dateInputValue = (value?: string) => value ? value.slice(0, 10) : '';
+
 const CourseModal: React.FC<CourseModalProps> = ({ course, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     name: course?.name || '',
@@ -16,8 +18,8 @@ const CourseModal: React.FC<CourseModalProps> = ({ course, onClose, onSave }) =>
     duration: course?.duration || '',
     schedule: course?.schedule || '',
     maxStudents: course?.maxStudents || '',
-    startDate: course?.startDate || '',
-    endDate: course?.endDate || '',
+    startDate: dateInputValue(course?.startDate),
+    endDate: dateInputValue(course?.endDate),
     syllabus: course?.syllabus || '',
     prerequisites: course?.prerequisites || '',
     status: course?.status || 'Active',

@@ -1,22 +1,24 @@
 import React, { useState } from 'react';
 import { Search, Plus, Edit, Eye, Trash2, Filter, BookOpen, Clock, Users } from 'lucide-react';
 import CourseModal from './CourseModal';
+import { useApiResource } from '../hooks/useApiResource';
+import { AppUser, canDelete, canManage, isVisibleForUser, scopeLabel } from '../access';
 
-const Courses = () => {
+type CoursesProps = {
+  user: AppUser;
+};
+
+const Courses: React.FC<CoursesProps> = ({ user }) => {
   const [showModal, setShowModal] = useState(false);
-  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [selectedCourse, setSelectedCourse] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterGrade, setFilterGrade] = useState('');
+  const { items: courses, loading, error, save, remove } = useApiResource<any>('courses');
+  const canWrite = canManage(user.role, 'courses');
+  const canRemove = canDelete(user.role);
+  const visibleCourses = courses.filter((course) => isVisibleForUser(user, course, 'courses'));
 
-  const courses = [
-    { id: 1, name: 'Quran Memorization Level 1', grade: 'Grade 1-2', teacher: 'Dr. Abdullah Rahman', students: 25, duration: '120 hours', schedule: 'Sun-Thu 8:00-9:30 AM', status: 'Active', description: 'Basic Quran memorization with proper Tajweed' },
-    { id: 2, name: 'Arabic Grammar Fundamentals', grade: 'Grade 3-4', teacher: 'Ustadha Fatima Al-Zahra', students: 22, duration: '80 hours', schedule: 'Sun-Thu 10:00-11:00 AM', status: 'Active', description: 'Foundation of Arabic grammar and syntax' },
-    { id: 3, name: 'Islamic History & Civilization', grade: 'Grade 5-6', teacher: 'Sheikh Omar Ibn Khalid', students: 28, duration: '100 hours', schedule: 'Sun-Thu 11:30 AM-12:30 PM', status: 'Active', description: 'History of Islamic civilization and notable figures' },
-    { id: 4, name: 'Hadith Studies Advanced', grade: 'Grade 7-8', teacher: 'Ustadha Aisha Mahmoud', students: 18, duration: '150 hours', schedule: 'Sun-Thu 2:00-3:30 PM', status: 'Active', description: 'Advanced study of Prophetic traditions' },
-    { id: 5, name: 'Fiqh & Islamic Law', grade: 'Grade 6-8', teacher: 'Dr. Hassan Al-Qadri', students: 20, duration: '180 hours', schedule: 'Mon-Wed 1:00-2:30 PM', status: 'Pending', description: 'Islamic jurisprudence and legal principles' },
-  ];
-
-  const filteredCourses = courses.filter(course => {
+  const filteredCourses = visibleCourses.filter(course => {
     const matchesSearch = course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          course.teacher.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesGrade = filterGrade === '' || course.grade.includes(filterGrade);
@@ -24,22 +26,26 @@ const Courses = () => {
   });
 
   const handleAddCourse = () => {
+    if (!canWrite) return;
     setSelectedCourse(null);
     setShowModal(true);
   };
 
-  const handleEditCourse = (course) => {
+  const handleEditCourse = (course: any) => {
+    if (!canWrite) return;
     setSelectedCourse(course);
     setShowModal(true);
   };
 
-  const handleViewCourse = (course) => {
-    console.log('View course:', course);
+  const handleViewCourse = (course: any) => {
+    setSelectedCourse(course);
+    setShowModal(true);
   };
 
-  const handleDeleteCourse = (course) => {
+  const handleDeleteCourse = async (course: any) => {
+    if (!canRemove) return;
     if (window.confirm(`Are you sure you want to delete ${course.name}?`)) {
-      console.log('Delete course:', course);
+      await remove(course.id);
     }
   };
 
@@ -49,15 +55,17 @@ const Courses = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Courses Management</h2>
-          <p className="text-gray-600">Manage curriculum and course schedules</p>
+          <p className="text-gray-600">{scopeLabel(user.role)}</p>
         </div>
-        <button
-          onClick={handleAddCourse}
-          className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors flex items-center space-x-2"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Course</span>
-        </button>
+        {canWrite && (
+          <button
+            onClick={handleAddCourse}
+            className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors flex items-center space-x-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Course</span>
+          </button>
+        )}
       </div>
 
       {/* Search and Filters */}
@@ -96,6 +104,9 @@ const Courses = () => {
         </div>
       </div>
 
+      {loading && <div className="bg-white rounded-lg p-4 text-gray-600 shadow-sm">Loading courses...</div>}
+      {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">{error}</div>}
+
       {/* Courses Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredCourses.map((course) => (
@@ -121,20 +132,24 @@ const Courses = () => {
                 >
                   <Eye className="w-4 h-4" />
                 </button>
-                <button
-                  onClick={() => handleEditCourse(course)}
-                  className="text-emerald-600 hover:text-emerald-800 p-1"
-                  title="Edit Course"
-                >
-                  <Edit className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleDeleteCourse(course)}
-                  className="text-red-600 hover:text-red-800 p-1"
-                  title="Delete Course"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {canWrite && (
+                  <button
+                    onClick={() => handleEditCourse(course)}
+                    className="text-emerald-600 hover:text-emerald-800 p-1"
+                    title="Edit Course"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                )}
+                {canRemove && (
+                  <button
+                    onClick={() => handleDeleteCourse(course)}
+                    className="text-red-600 hover:text-red-800 p-1"
+                    title="Delete Course"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -180,19 +195,19 @@ const Courses = () => {
       {/* Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-          <div className="text-2xl font-bold text-blue-600">{courses.length}</div>
-          <div className="text-sm text-gray-600">Total Courses</div>
+          <div className="text-2xl font-bold text-blue-600">{visibleCourses.length}</div>
+          <div className="text-sm text-gray-600">Visible Courses</div>
         </div>
         <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-          <div className="text-2xl font-bold text-green-600">{courses.filter(c => c.status === 'Active').length}</div>
+          <div className="text-2xl font-bold text-green-600">{visibleCourses.filter(c => c.status === 'Active').length}</div>
           <div className="text-sm text-gray-600">Active Courses</div>
         </div>
         <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-          <div className="text-2xl font-bold text-purple-600">{courses.reduce((sum, c) => sum + c.students, 0)}</div>
+          <div className="text-2xl font-bold text-purple-600">{visibleCourses.reduce((sum, c) => sum + c.students, 0)}</div>
           <div className="text-sm text-gray-600">Total Enrollments</div>
         </div>
         <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-          <div className="text-2xl font-bold text-orange-600">{Math.round(courses.reduce((sum, c) => sum + c.students, 0) / courses.filter(c => c.status === 'Active').length)}</div>
+          <div className="text-2xl font-bold text-orange-600">{Math.round(visibleCourses.reduce((sum, c) => sum + c.students, 0) / Math.max(visibleCourses.filter(c => c.status === 'Active').length, 1))}</div>
           <div className="text-sm text-gray-600">Avg Class Size</div>
         </div>
       </div>
@@ -202,8 +217,12 @@ const Courses = () => {
         <CourseModal
           course={selectedCourse}
           onClose={() => setShowModal(false)}
-          onSave={(courseData) => {
-            console.log('Save course:', courseData);
+          onSave={async (courseData) => {
+            if (!canWrite) {
+              setShowModal(false);
+              return;
+            }
+            await save(selectedCourse?.id, { ...courseData, institutionId: user.institutionId || 1 });
             setShowModal(false);
           }}
         />

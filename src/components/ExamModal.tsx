@@ -5,15 +5,18 @@ interface ExamModalProps {
   exam?: any;
   onClose: () => void;
   onSave: (examData: any) => void;
+  readOnly?: boolean;
 }
 
-const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
+const dateInputValue = (value?: string) => value ? value.slice(0, 10) : '';
+
+const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave, readOnly = false }) => {
   const [formData, setFormData] = useState({
     title: exam?.title || '',
     course: exam?.course || '',
     grade: exam?.grade || '',
     teacher: exam?.teacher || '',
-    date: exam?.date || '',
+    date: dateInputValue(exam?.date),
     time: exam?.time || '',
     duration: exam?.duration || '',
     totalMarks: exam?.totalMarks || '',
@@ -27,10 +30,12 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (readOnly) return;
     onSave(formData);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    if (readOnly) return;
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
@@ -65,7 +70,7 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-xl font-semibold text-gray-900">
-            {exam ? 'Edit Exam' : 'Schedule New Exam'}
+            {readOnly ? 'View Exam' : exam ? 'Edit Exam' : 'Schedule New Exam'}
           </h2>
           <button
             onClick={onClose}
@@ -92,8 +97,9 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
                   name="title"
                   value={formData.title}
                   onChange={handleChange}
+                  disabled={readOnly}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-600"
                 />
               </div>
 
@@ -103,8 +109,9 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
                   name="course"
                   value={formData.course}
                   onChange={handleChange}
+                  disabled={readOnly}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-600"
                 >
                   <option value="">Select Course</option>
                   {courses.map(course => (
@@ -120,8 +127,9 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
                     name="grade"
                     value={formData.grade}
                     onChange={handleChange}
+                    disabled={readOnly}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-600"
                   >
                     <option value="">Select Grade</option>
                     {grades.map(grade => (
@@ -136,8 +144,9 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
                     name="teacher"
                     value={formData.teacher}
                     onChange={handleChange}
+                    disabled={readOnly}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-600"
                   >
                     <option value="">Select Teacher</option>
                     {teachers.map(teacher => (
@@ -154,7 +163,8 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
                     name="examType"
                     value={formData.examType}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    disabled={readOnly}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-600"
                   >
                     <option value="Written">Written</option>
                     <option value="Oral">Oral</option>
@@ -169,7 +179,8 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
                     name="status"
                     value={formData.status}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    disabled={readOnly}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-600"
                   >
                     <option value="Scheduled">Scheduled</option>
                     <option value="Upcoming">Upcoming</option>
@@ -186,8 +197,9 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
                   name="venue"
                   value={formData.venue}
                   onChange={handleChange}
+                  disabled={readOnly}
                   placeholder="e.g., Classroom A, Main Hall"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-600"
                 />
               </div>
             </div>
@@ -207,8 +219,9 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
                     name="date"
                     value={formData.date}
                     onChange={handleChange}
+                    disabled={readOnly}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-600"
                   />
                 </div>
 
@@ -219,8 +232,9 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
                     name="time"
                     value={formData.time}
                     onChange={handleChange}
+                    disabled={readOnly}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-600"
                   />
                 </div>
               </div>
@@ -232,10 +246,11 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
                   name="duration"
                   value={formData.duration}
                   onChange={handleChange}
+                  disabled={readOnly}
                   required
                   min="15"
                   step="15"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-600"
                 />
               </div>
 
@@ -247,9 +262,10 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
                     name="totalMarks"
                     value={formData.totalMarks}
                     onChange={handleChange}
+                    disabled={readOnly}
                     required
                     min="1"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-600"
                   />
                 </div>
 
@@ -260,8 +276,9 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
                     name="passingMarks"
                     value={formData.passingMarks}
                     onChange={handleChange}
+                    disabled={readOnly}
                     min="1"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-600"
                   />
                 </div>
               </div>
@@ -272,9 +289,10 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
                   name="syllabus"
                   value={formData.syllabus}
                   onChange={handleChange}
+                  disabled={readOnly}
                   rows={4}
                   placeholder="List the topics and chapters covered in this exam..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-600"
                 />
               </div>
             </div>
@@ -292,9 +310,10 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
                   name="instructions"
                   value={formData.instructions}
                   onChange={handleChange}
+                  disabled={readOnly}
                   rows={4}
                   placeholder="Enter detailed instructions for students taking this exam..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-600"
                 />
               </div>
             </div>
@@ -309,12 +328,14 @@ const ExamModal: React.FC<ExamModalProps> = ({ exam, onClose, onSave }) => {
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
-            >
-              {exam ? 'Update Exam' : 'Schedule Exam'}
-            </button>
+            {!readOnly && (
+              <button
+                type="submit"
+                className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
+              >
+                {exam ? 'Update Exam' : 'Schedule Exam'}
+              </button>
+            )}
           </div>
         </form>
       </div>

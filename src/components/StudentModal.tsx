@@ -7,6 +7,8 @@ interface StudentModalProps {
   onSave: (studentData: any) => void;
 }
 
+const dateInputValue = (value?: string) => value ? value.slice(0, 10) : '';
+
 const StudentModal: React.FC<StudentModalProps> = ({ student, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     name: student?.name || '',
@@ -16,8 +18,8 @@ const StudentModal: React.FC<StudentModalProps> = ({ student, onClose, onSave })
     phone: student?.phone || '',
     email: student?.email || '',
     address: student?.address || '',
-    dateOfBirth: student?.dateOfBirth || '',
-    admissionDate: student?.admissionDate || '',
+    dateOfBirth: dateInputValue(student?.dateOfBirth),
+    admissionDate: dateInputValue(student?.admissionDate),
     emergencyContact: student?.emergencyContact || '',
     medicalInfo: student?.medicalInfo || '',
     status: student?.status || 'Active',

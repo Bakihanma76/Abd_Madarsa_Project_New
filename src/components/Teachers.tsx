@@ -1,22 +1,24 @@
 import React, { useState } from 'react';
 import { Search, Plus, Edit, Eye, Trash2, Filter, Award } from 'lucide-react';
 import TeacherModal from './TeacherModal';
+import { useApiResource } from '../hooks/useApiResource';
+import { AppUser, canDelete, canManage, scopeLabel } from '../access';
 
-const Teachers = () => {
+type TeachersProps = {
+  user: AppUser;
+};
+
+const Teachers: React.FC<TeachersProps> = ({ user }) => {
   const [showModal, setShowModal] = useState(false);
-  const [selectedTeacher, setSelectedTeacher] = useState(null);
+  const [selectedTeacher, setSelectedTeacher] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSubject, setFilterSubject] = useState('');
+  const { items: teachers, loading, error, save, remove } = useApiResource<any>('teachers');
+  const canWrite = canManage(user.role, 'teachers');
+  const canRemove = canDelete(user.role);
+  const visibleTeachers = teachers.filter((teacher) => !user.institutionId || !teacher.institutionId || Number(teacher.institutionId) === Number(user.institutionId));
 
-  const teachers = [
-    { id: 1, name: 'Dr. Abdullah Rahman', subject: 'Quran & Tajweed', qualification: 'PhD in Islamic Studies', experience: 15, phone: '+966-511234567', email: 'abdullah.rahman@madarsa.edu', status: 'Active', salary: '8000', classes: 4 },
-    { id: 2, name: 'Ustadha Fatima Al-Zahra', subject: 'Arabic Literature', qualification: 'Masters in Arabic', experience: 8, phone: '+966-512345678', email: 'fatima.alzahra@madarsa.edu', status: 'Active', salary: '6500', classes: 3 },
-    { id: 3, name: 'Sheikh Omar Ibn Khalid', subject: 'Islamic History', qualification: 'Masters in History', experience: 12, phone: '+966-513456789', email: 'omar.khalid@madarsa.edu', status: 'Active', salary: '7500', classes: 5 },
-    { id: 4, name: 'Ustadha Aisha Mahmoud', subject: 'Hadith Studies', qualification: 'PhD in Hadith Sciences', experience: 10, phone: '+966-514567890', email: 'aisha.mahmoud@madarsa.edu', status: 'Active', salary: '7800', classes: 3 },
-    { id: 5, name: 'Dr. Hassan Al-Qadri', subject: 'Fiqh & Jurisprudence', qualification: 'PhD in Islamic Law', experience: 20, phone: '+966-515678901', email: 'hassan.qadri@madarsa.edu', status: 'Leave', salary: '9000', classes: 4 },
-  ];
-
-  const filteredTeachers = teachers.filter(teacher => {
+  const filteredTeachers = visibleTeachers.filter(teacher => {
     const matchesSearch = teacher.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          teacher.subject.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesSubject = filterSubject === '' || teacher.subject === filterSubject;
@@ -24,26 +26,30 @@ const Teachers = () => {
   });
 
   const handleAddTeacher = () => {
+    if (!canWrite) return;
     setSelectedTeacher(null);
     setShowModal(true);
   };
 
-  const handleEditTeacher = (teacher) => {
+  const handleEditTeacher = (teacher: any) => {
+    if (!canWrite) return;
     setSelectedTeacher(teacher);
     setShowModal(true);
   };
 
-  const handleViewTeacher = (teacher) => {
-    console.log('View teacher:', teacher);
+  const handleViewTeacher = (teacher: any) => {
+    setSelectedTeacher(teacher);
+    setShowModal(true);
   };
 
-  const handleDeleteTeacher = (teacher) => {
+  const handleDeleteTeacher = async (teacher: any) => {
+    if (!canRemove) return;
     if (window.confirm(`Are you sure you want to remove ${teacher.name}?`)) {
-      console.log('Delete teacher:', teacher);
+      await remove(teacher.id);
     }
   };
 
-  const subjects = [...new Set(teachers.map(t => t.subject))];
+  const subjects = [...new Set(visibleTeachers.map(t => t.subject))];
 
   return (
     <div className="space-y-6">
@@ -51,15 +57,17 @@ const Teachers = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Teachers Management</h2>
-          <p className="text-gray-600">Manage teaching staff and their assignments</p>
+          <p className="text-gray-600">{scopeLabel(user.role)}</p>
         </div>
-        <button
-          onClick={handleAddTeacher}
-          className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors flex items-center space-x-2"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Teacher</span>
-        </button>
+        {canWrite && (
+          <button
+            onClick={handleAddTeacher}
+            className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors flex items-center space-x-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Teacher</span>
+          </button>
+        )}
       </div>
 
       {/* Search and Filters */}
@@ -92,6 +100,9 @@ const Teachers = () => {
           </div>
         </div>
       </div>
+
+      {loading && <div className="bg-white rounded-lg p-4 text-gray-600 shadow-sm">Loading teachers...</div>}
+      {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">{error}</div>}
 
       {/* Teachers Table */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -154,20 +165,24 @@ const Teachers = () => {
                       >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => handleEditTeacher(teacher)}
-                        className="text-emerald-600 hover:text-emerald-800 p-1"
-                        title="Edit Teacher"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteTeacher(teacher)}
-                        className="text-red-600 hover:text-red-800 p-1"
-                        title="Remove Teacher"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canWrite && (
+                        <button
+                          onClick={() => handleEditTeacher(teacher)}
+                          className="text-emerald-600 hover:text-emerald-800 p-1"
+                          title="Edit Teacher"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      )}
+                      {canRemove && (
+                        <button
+                          onClick={() => handleDeleteTeacher(teacher)}
+                          className="text-red-600 hover:text-red-800 p-1"
+                          title="Remove Teacher"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -186,11 +201,11 @@ const Teachers = () => {
       {/* Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-          <div className="text-2xl font-bold text-blue-600">{teachers.length}</div>
+          <div className="text-2xl font-bold text-blue-600">{visibleTeachers.length}</div>
           <div className="text-sm text-gray-600">Total Teachers</div>
         </div>
         <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-          <div className="text-2xl font-bold text-green-600">{teachers.filter(t => t.status === 'Active').length}</div>
+          <div className="text-2xl font-bold text-green-600">{visibleTeachers.filter(t => t.status === 'Active').length}</div>
           <div className="text-sm text-gray-600">Active Teachers</div>
         </div>
         <div className="bg-white rounded-lg p-4 text-center shadow-sm">
@@ -198,7 +213,7 @@ const Teachers = () => {
           <div className="text-sm text-gray-600">Subjects Offered</div>
         </div>
         <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-          <div className="text-2xl font-bold text-orange-600">{Math.round(teachers.reduce((sum, t) => sum + t.experience, 0) / teachers.length)}</div>
+          <div className="text-2xl font-bold text-orange-600">{Math.round(visibleTeachers.reduce((sum, t) => sum + t.experience, 0) / Math.max(visibleTeachers.length, 1))}</div>
           <div className="text-sm text-gray-600">Avg Experience</div>
         </div>
       </div>
@@ -208,8 +223,12 @@ const Teachers = () => {
         <TeacherModal
           teacher={selectedTeacher}
           onClose={() => setShowModal(false)}
-          onSave={(teacherData) => {
-            console.log('Save teacher:', teacherData);
+          onSave={async (teacherData) => {
+            if (!canWrite) {
+              setShowModal(false);
+              return;
+            }
+            await save(selectedTeacher?.id, { ...teacherData, institutionId: user.institutionId || 1 });
             setShowModal(false);
           }}
         />

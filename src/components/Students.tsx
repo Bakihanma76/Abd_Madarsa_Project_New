@@ -1,22 +1,24 @@
 import React, { useState } from 'react';
 import { Search, Plus, Edit, Eye, Trash2, Filter } from 'lucide-react';
 import StudentModal from './StudentModal';
+import { useApiResource } from '../hooks/useApiResource';
+import { AppUser, canDelete, canManage, isVisibleForUser, scopeLabel } from '../access';
 
-const Students = () => {
+type StudentsProps = {
+  user: AppUser;
+};
+
+const Students: React.FC<StudentsProps> = ({ user }) => {
   const [showModal, setShowModal] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterGrade, setFilterGrade] = useState('');
+  const { items: students, loading, error, save, remove } = useApiResource<any>('students');
+  const canWrite = canManage(user.role, 'students');
+  const canRemove = canDelete(user.role);
+  const visibleStudents = students.filter((student) => isVisibleForUser(user, student, 'students'));
 
-  const students = [
-    { id: 1, name: 'Ahmed Hassan Ali', grade: 'Grade 5', age: 12, guardianName: 'Hassan Ali', phone: '+966-501234567', email: 'hassan.ali@email.com', status: 'Active', admissionDate: '2023-09-01', subjects: 5 },
-    { id: 2, name: 'Fatima Muhammad', grade: 'Grade 3', age: 10, guardianName: 'Muhammad Ahmad', phone: '+966-502345678', email: 'muhammad.ahmad@email.com', status: 'Active', admissionDate: '2023-09-01', subjects: 4 },
-    { id: 3, name: 'Omar Abdullah', grade: 'Grade 7', age: 14, guardianName: 'Abdullah Omar', phone: '+966-503456789', email: 'abdullah.omar@email.com', status: 'Active', admissionDate: '2022-09-01', subjects: 6 },
-    { id: 4, name: 'Aisha Ibrahim', grade: 'Grade 4', age: 11, guardianName: 'Ibrahim Yusuf', phone: '+966-504567890', email: 'ibrahim.yusuf@email.com', status: 'Active', admissionDate: '2023-09-01', subjects: 5 },
-    { id: 5, name: 'Khalid Rahman', grade: 'Grade 6', age: 13, guardianName: 'Rahman Khalid', phone: '+966-505678901', email: 'rahman.khalid@email.com', status: 'Inactive', admissionDate: '2022-09-01', subjects: 5 },
-  ];
-
-  const filteredStudents = students.filter(student => {
+  const filteredStudents = visibleStudents.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          student.guardianName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesGrade = filterGrade === '' || student.grade === filterGrade;
@@ -24,24 +26,26 @@ const Students = () => {
   });
 
   const handleAddStudent = () => {
+    if (!canWrite) return;
     setSelectedStudent(null);
     setShowModal(true);
   };
 
-  const handleEditStudent = (student) => {
+  const handleEditStudent = (student: any) => {
+    if (!canWrite) return;
     setSelectedStudent(student);
     setShowModal(true);
   };
 
-  const handleViewStudent = (student) => {
-    // Implement view student details
-    console.log('View student:', student);
+  const handleViewStudent = (student: any) => {
+    setSelectedStudent(student);
+    setShowModal(true);
   };
 
-  const handleDeleteStudent = (student) => {
+  const handleDeleteStudent = async (student: any) => {
+    if (!canRemove) return;
     if (window.confirm(`Are you sure you want to delete ${student.name}?`)) {
-      // Implement delete student
-      console.log('Delete student:', student);
+      await remove(student.id);
     }
   };
 
@@ -51,15 +55,17 @@ const Students = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Students Management</h2>
-          <p className="text-gray-600">Manage student records and academic information</p>
+          <p className="text-gray-600">{scopeLabel(user.role)}</p>
         </div>
-        <button
-          onClick={handleAddStudent}
-          className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors flex items-center space-x-2"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Student</span>
-        </button>
+        {canWrite && (
+          <button
+            onClick={handleAddStudent}
+            className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors flex items-center space-x-2"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Student</span>
+          </button>
+        )}
       </div>
 
       {/* Search and Filters */}
@@ -97,6 +103,9 @@ const Students = () => {
           </div>
         </div>
       </div>
+
+      {loading && <div className="bg-white rounded-lg p-4 text-gray-600 shadow-sm">Loading students...</div>}
+      {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">{error}</div>}
 
       {/* Students Table */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -150,20 +159,24 @@ const Students = () => {
                       >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => handleEditStudent(student)}
-                        className="text-emerald-600 hover:text-emerald-800 p-1"
-                        title="Edit Student"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteStudent(student)}
-                        className="text-red-600 hover:text-red-800 p-1"
-                        title="Delete Student"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canWrite && (
+                        <button
+                          onClick={() => handleEditStudent(student)}
+                          className="text-emerald-600 hover:text-emerald-800 p-1"
+                          title="Edit Student"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      )}
+                      {canRemove && (
+                        <button
+                          onClick={() => handleDeleteStudent(student)}
+                          className="text-red-600 hover:text-red-800 p-1"
+                          title="Delete Student"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -182,11 +195,11 @@ const Students = () => {
       {/* Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-          <div className="text-2xl font-bold text-blue-600">{students.length}</div>
-          <div className="text-sm text-gray-600">Total Students</div>
+          <div className="text-2xl font-bold text-blue-600">{visibleStudents.length}</div>
+          <div className="text-sm text-gray-600">Visible Students</div>
         </div>
         <div className="bg-white rounded-lg p-4 text-center shadow-sm">
-          <div className="text-2xl font-bold text-green-600">{students.filter(s => s.status === 'Active').length}</div>
+          <div className="text-2xl font-bold text-green-600">{visibleStudents.filter(s => s.status === 'Active').length}</div>
           <div className="text-sm text-gray-600">Active Students</div>
         </div>
         <div className="bg-white rounded-lg p-4 text-center shadow-sm">
@@ -204,8 +217,12 @@ const Students = () => {
         <StudentModal
           student={selectedStudent}
           onClose={() => setShowModal(false)}
-          onSave={(studentData) => {
-            console.log('Save student:', studentData);
+          onSave={async (studentData) => {
+            if (!canWrite) {
+              setShowModal(false);
+              return;
+            }
+            await save(selectedStudent?.id, { ...studentData, institutionId: user.institutionId || 1 });
             setShowModal(false);
           }}
         />
