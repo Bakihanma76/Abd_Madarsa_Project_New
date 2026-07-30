@@ -24,7 +24,7 @@ Google Drive cannot run this app because it cannot run Node.js or MySQL.
 1. Push this repo to GitHub.
 2. In Render, create a new Web Service from the repo.
 3. Use:
-   - build command: `npm ci`
+   - build command: `npm ci && npm run db:setup`
    - start command: `npm run server`
    - health check path: `/api/health`
 4. Add environment variables:
@@ -42,13 +42,13 @@ Google Drive cannot run this app because it cannot run Node.js or MySQL.
 
 ## 3. Setup Cloud Database
 
-After Render env vars are set, open Render Shell and run:
+If your Render plan has Shell access, you can run:
 
 ```bash
 npm run db:setup
 ```
 
-This creates tables and seed data in Aiven MySQL.
+On Render Hobby without Shell access, set the Render build command to `npm ci && npm run db:setup`. This creates tables and seed data in Aiven MySQL during each deploy.
 
 ## 4. Deploy Frontend On Vercel
 
