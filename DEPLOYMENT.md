@@ -11,7 +11,7 @@ Google Drive cannot run this app because it cannot run Node.js or MySQL.
 ## 1. Create Aiven MySQL
 
 1. Create an Aiven account.
-2. Create a free MySQL service.
+2. Create a free MySQL service. Do not create OpenSearch, PostgreSQL, Redis, or Kafka for this app.
 3. Copy these values from Aiven:
    - host
    - port
