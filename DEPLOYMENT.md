@@ -33,6 +33,8 @@ Google Drive cannot run this app because it cannot run Node.js or MySQL.
    - `DB_USER`
    - `DB_PASSWORD`
    - `DB_NAME`
+   - `DB_SSL=true`
+   - `DB_SSL_REJECT_UNAUTHORIZED=false`
    - `NODE_ENV=production`
    - `FRONTEND_URL=https://your-vercel-app.vercel.app`
 5. Deploy.
