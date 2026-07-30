@@ -92,7 +92,7 @@ function App() {
     setCurrentUser({
       ...safeUser,
       institutionId: matchedUser.role === 'admin' ? selectedInstitutionId : matchedUser.institutionId,
-      institutionName: matchedUser.role === 'admin' ? selectedInstitution?.name : undefined,
+      institutionName: matchedUser.role === 'admin' ? selectedInstitution?.name : safeUser.institutionName,
     });
     setActiveTab('dashboard');
     setLoginError('');
@@ -133,7 +133,7 @@ function App() {
               <BookOpen className="w-7 h-7 text-emerald-700" />
             </div>
             <h1 className="text-3xl font-bold">Madarsa Management</h1>
-            <p className="text-emerald-50 mt-3">Role-based mock login for checking separate dashboards and permissions.</p>
+            <p className="text-emerald-50 mt-3">Role-based mock login for checking dashboards and permissions.</p>
 
             <div className="mt-8 space-y-3">
               {users.map((user) => (
@@ -166,6 +166,7 @@ function App() {
                   value={loginEmail}
                   onChange={(event) => setLoginEmail(event.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  required
                 />
               </div>
               <div>
@@ -175,6 +176,7 @@ function App() {
                   value={loginPassword}
                   onChange={(event) => setLoginPassword(event.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  required
                 />
               </div>
               {isAdminEmail && (
@@ -217,7 +219,6 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white shadow-sm border-b-4 border-emerald-600">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
@@ -270,7 +271,6 @@ function App() {
           </div>
         </div>
 
-        {/* Navigation Tabs */}
         <div className="mb-8">
           <nav className="flex space-x-1 bg-white p-1 rounded-xl shadow-sm">
             {visibleTabs.map((tab) => {
@@ -293,10 +293,7 @@ function App() {
           </nav>
         </div>
 
-        {/* Content */}
-        <div className="transition-all duration-300">
-          {renderContent()}
-        </div>
+        <div className="transition-all duration-300">{renderContent()}</div>
       </div>
     </div>
   );
