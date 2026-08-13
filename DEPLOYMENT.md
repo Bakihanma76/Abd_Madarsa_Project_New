@@ -24,7 +24,7 @@ Google Drive cannot run this app because it cannot run Node.js or MySQL.
 1. Push this repo to GitHub.
 2. In Render, create a new Web Service from the repo.
 3. Use:
-   - build command: `npm ci && npm run db:setup`
+   - build command: `npm ci`
    - start command: `npm run server`
    - health check path: `/api/health`
 4. Add environment variables:
@@ -37,6 +37,7 @@ Google Drive cannot run this app because it cannot run Node.js or MySQL.
    - `DB_SSL_REJECT_UNAUTHORIZED=false`
    - `NODE_ENV=production`
    - `FRONTEND_URL=https://your-vercel-app.vercel.app`
+   - `SETUP_TOKEN=make-a-long-random-value`
 5. Deploy.
 6. Open `https://your-render-backend.onrender.com/api/health`.
 
@@ -48,7 +49,13 @@ If your Render plan has Shell access, you can run:
 npm run db:setup
 ```
 
-On Render Hobby without Shell access, set the Render build command to `npm ci && npm run db:setup`. This creates tables and seed data in Aiven MySQL during each deploy.
+On Render Hobby without Shell access, open this URL after the backend is deployed:
+
+```text
+https://your-render-backend.onrender.com/api/setup/database?token=your-setup-token
+```
+
+This creates tables and seed data in Aiven MySQL without requiring Render Shell.
 
 ## 4. Deploy Frontend On Vercel
 

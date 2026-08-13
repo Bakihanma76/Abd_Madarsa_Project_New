@@ -3,7 +3,7 @@ services:
     name: abd-madarsa-api
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run db:setup
+    buildCommand: npm ci
     startCommand: npm run server
     healthCheckPath: /api/health
     envVars:
@@ -20,4 +20,6 @@ services:
       - key: DB_NAME
         sync: false
       - key: FRONTEND_URL
+        sync: false
+      - key: SETUP_TOKEN
         sync: false

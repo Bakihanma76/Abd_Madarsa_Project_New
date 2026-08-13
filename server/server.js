@@ -1,10 +1,13 @@
 import { createServer } from 'node:http';
 import { lookup } from 'node:dns/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { all, insert, one, remove, rows, scalar, update } from './db.js';
 import { publicDbConfig } from './db-config.js';
 import { ReportFactory } from './reports/ReportFactory.js';
 
 const port = Number(process.env.PORT || 3001);
+const execFileAsync = promisify(execFile);
 const allowedOrigins = (process.env.FRONTEND_URL || 'http://127.0.0.1:5173,http://localhost:5173')
   .split(',')
   .map((origin) => origin.trim())
@@ -105,6 +108,38 @@ const dbDebug = async () => {
   }
 };
 
+const setupDatabase = async (url) => {
+  const setupToken = process.env.SETUP_TOKEN;
+  if (!setupToken) return { status: 403, payload: { error: 'SETUP_TOKEN is not configured.' } };
+  if (url.searchParams.get('token') !== setupToken) return { status: 403, payload: { error: 'Invalid setup token.' } };
+
+  try {
+    const result = await execFileAsync(process.execPath, ['server/setup-mysql.js'], {
+      cwd: process.cwd(),
+      timeout: 120000,
+      maxBuffer: 1024 * 1024,
+    });
+    return {
+      status: 200,
+      payload: {
+        ok: true,
+        stdout: result.stdout.trim(),
+        stderr: result.stderr.trim(),
+      },
+    };
+  } catch (error) {
+    return {
+      status: 500,
+      payload: {
+        ok: false,
+        error: error.message,
+        stdout: error.stdout?.trim(),
+        stderr: error.stderr?.trim(),
+      },
+    };
+  }
+};
+
 const report = async (type, context = {}) => {
   const provider = ReportFactory.create(type, context);
   return provider.build();
@@ -119,6 +154,10 @@ createServer(async (req, res) => {
     if (parts[0] !== 'api') return send(req, res, 404, { error: 'Not found' });
     if (parts[1] === 'health') return send(req, res, 200, { ok: true });
     if (parts[1] === 'debug' && parts[2] === 'db') return send(req, res, 200, await dbDebug());
+    if (parts[1] === 'setup' && parts[2] === 'database') {
+      const result = await setupDatabase(url);
+      return send(req, res, result.status, result.payload);
+    }
     if (parts[1] === 'dashboard') return send(req, res, 200, await dashboard());
     if (parts[1] === 'reports') {
       const type = url.searchParams.get('type') || 'academic';
