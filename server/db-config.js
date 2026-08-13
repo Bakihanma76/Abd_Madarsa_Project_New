@@ -19,3 +19,11 @@ export const dbConfig = {
   password: process.env.DB_PASSWORD || '',
   ...(dbSsl ? { ssl: dbSsl } : {}),
 };
+
+export const publicDbConfig = () => ({
+  host: dbConfig.host,
+  port: dbConfig.port,
+  user: dbConfig.user,
+  database: dbName,
+  sslEnabled: Boolean(dbSsl),
+});

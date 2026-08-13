@@ -1,5 +1,7 @@
 import { createServer } from 'node:http';
+import { lookup } from 'node:dns/promises';
 import { all, insert, one, remove, rows, scalar, update } from './db.js';
+import { publicDbConfig } from './db-config.js';
 import { ReportFactory } from './reports/ReportFactory.js';
 
 const port = Number(process.env.PORT || 3001);
@@ -93,6 +95,16 @@ const dashboard = async () => {
   return { stats, upcomingExams };
 };
 
+const dbDebug = async () => {
+  const config = publicDbConfig();
+  try {
+    const result = await lookup(config.host);
+    return { ...config, dns: { ok: true, address: result.address, family: result.family } };
+  } catch (error) {
+    return { ...config, dns: { ok: false, error: error.code || error.message } };
+  }
+};
+
 const report = async (type, context = {}) => {
   const provider = ReportFactory.create(type, context);
   return provider.build();
@@ -106,6 +118,7 @@ createServer(async (req, res) => {
     const parts = url.pathname.split('/').filter(Boolean);
     if (parts[0] !== 'api') return send(req, res, 404, { error: 'Not found' });
     if (parts[1] === 'health') return send(req, res, 200, { ok: true });
+    if (parts[1] === 'debug' && parts[2] === 'db') return send(req, res, 200, await dbDebug());
     if (parts[1] === 'dashboard') return send(req, res, 200, await dashboard());
     if (parts[1] === 'reports') {
       const type = url.searchParams.get('type') || 'academic';
