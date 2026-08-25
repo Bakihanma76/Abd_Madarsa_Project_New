@@ -21,6 +21,66 @@ type Institution = {
   status: string;
 };
 
+type InstructionPage = {
+  title: string;
+  language: string;
+  direction?: 'ltr' | 'rtl';
+  items: string[];
+  declaration: string;
+};
+
+const instructionPages: InstructionPage[] = [
+  {
+    title: 'Hidayaat Baraye Sarparast',
+    language: 'Roman Urdu',
+    items: [
+      'Madrase me admission ke waqt student ki age kam se kam 7 years ho.',
+      'Student ke Madrasa aane aur wapas jaane ki zimmedari walidain/sarparast par hogi.',
+      'Exams me shirkat ke liye student ki 80% attendance zaroori hogi, warna student exams me shirkat ka haqdar nahi hoga.',
+      'Student ka madrase me qeemti cheezein lekar aana allowed nahi hai. E.g., mobile phone, expensive watch, money, etc.',
+      'Madrase ke har student ke liye kurta/jubba pajama aur topi zaroori hai. Iske alawa doosra libaas madrase me rakhna allowed hoga. Student ka hairstyle shariyat ke mutaabiq hona zaroori hai.',
+      'Bad akhlaqi ya ladai jhagde ki soorat me student ko samjhaya jayega. Na maanne ki soorat me madrase se nikaala bhi ja sakta hai.',
+      'Sarparast har mahine kam se kam ek baar apne bacche ke ustaz se mil kar taleemi report zaroor maloom kar lein.',
+      'Student ki fees har mahina advance adaa karna hoga aur har mahine ki 10 tareekh se pehle adaa karna zaroori hoga.',
+      'Madrase ke management ki janib se jis waqt bhi jo hidayat di jaye, uski pabandi zaroori hogi.',
+    ],
+    declaration: 'Main jo details upar likha hun wo mere ilm ke mutaabiq correct hain, aur main ne hidayaat ko achchi tarah padh liya hai. Un par main khud bhi poori tarah amal karunga aur student se bhi amal karaunga.',
+  },
+  {
+    title: 'సంరక్షకుల కోసం సూచనలు',
+    language: 'Telugu',
+    items: [
+      'మదర్సాలో అడ్మిషన్ సమయంలో విద్యార్థి వయస్సు కనీసం 7 సంవత్సరాలు ఉండాలి.',
+      'విద్యార్థి మదర్సాకు రావడం మరియు తిరిగి వెళ్లడం యొక్క బాధ్యత తల్లిదండ్రులు/సంరక్షకులపై ఉంటుంది.',
+      'పరీక్షల్లో పాల్గొనడానికి విద్యార్థికి 80% హాజరు తప్పనిసరి. లేకపోతే విద్యార్థి పరీక్షకు అర్హుడు కాదు.',
+      'విద్యార్థి మదర్సాకు విలువైన వస్తువులు తీసుకురావడానికి అనుమతి లేదు. ఉదా: మొబైల్ ఫోన్, ఖరీదైన వాచ్, డబ్బు మొదలైనవి.',
+      'ప్రతి విద్యార్థికి కుర్తా/జుబ్బా, పజామా మరియు టోపీ దుస్తులుగా తప్పనిసరి. అదనంగా మదర్సాలో రెండవ దుస్తుల జత ఉంచడానికి అనుమతి ఉంటుంది. విద్యార్థి జుట్టు కూడా శరియత్ ప్రకారం ఉండాలి.',
+      'చెడు ప్రవర్తన లేదా గొడవల సందర్భంలో విద్యార్థికి ముందుగా అర్థం చెప్పబడుతుంది. వినకపోతే మదర్సా నుండి తొలగించబడవచ్చు.',
+      'సంరక్షకులు ప్రతి నెల కనీసం ఒకసారి తమ పిల్లల ఉపాధ్యాయుడిని కలసి పిల్లల విద్యా నివేదిక తెలుసుకోవాలి.',
+      'విద్యార్థి ఫీజు ప్రతి నెల ముందుగానే చెల్లించాలి మరియు ప్రతి నెల 10వ తేదీకి ముందు చెల్లించడం తప్పనిసరి.',
+      'మదర్సా మేనేజ్‌మెంట్ తరఫున ఎప్పుడైనా ఇచ్చే సూచనలను తప్పనిసరిగా పాటించాలి.',
+    ],
+    declaration: 'పై వివరాలు నా జ్ఞానం ప్రకారం సరైనవి. నేను సూచనలను బాగా చదివాను. వాటిని నేను పూర్తిగా పాటిస్తాను మరియు విద్యార్థితో కూడా పాటింపజేస్తాను.',
+  },
+  {
+    title: 'ہدایات برائے سرپرست',
+    language: 'Urdu',
+    direction: 'rtl',
+    items: [
+      'مدرسے میں داخلے کے وقت طالب علم کی عمر کم از کم 7 سال ہونی چاہیے۔',
+      'طالب علم کے مدرسہ آنے اور واپس جانے کی ذمہ داری والدین/سرپرست پر ہوگی۔',
+      'امتحان میں شرکت کے لیے طالب علم کی 80% حاضری ضروری ہوگی، ورنہ طالب علم امتحان میں شرکت کا حق دار نہیں ہوگا۔',
+      'طالب علم کو مدرسے میں قیمتی چیزیں لانے کی اجازت نہیں ہے، مثلاً موبائل فون، مہنگی گھڑی، رقم وغیرہ۔',
+      'مدرسے کے ہر طالب علم کے لیے لباس یعنی کرتا/جبہ، پاجامہ اور ٹوپی ضروری ہے۔ اس کے علاوہ مدرسے میں دوسرا لباس رکھنے کی اجازت ہوگی۔ طالب علم کے بال بھی شریعت کے مطابق ہونے ضروری ہیں۔',
+      'بد اخلاقی یا لڑائی جھگڑے کی صورت میں طالب علم کو سمجھایا جائے گا۔ نہ ماننے کی صورت میں مدرسے سے نکالا بھی جا سکتا ہے۔',
+      'سرپرست حضرات ہر ماہ کم از کم ایک بار اپنے بچے کے استاد سے مل کر بچے کی تعلیمی رپورٹ ضرور معلوم کریں۔',
+      'طالب علم کی فیس ہر ماہ پیشگی ادا کرنی ہوگی اور ہر ماہ کی 10 تاریخ سے پہلے ادا کرنا ضروری ہوگا۔',
+      'مدرسے کی انتظامیہ کی جانب سے جب بھی جو ہدایت دی جائے، اس کی پابندی ضروری ہوگی۔',
+    ],
+    declaration: 'میں نے اوپر لکھی ہوئی تفصیلات اپنے علم کے مطابق درست لکھی ہیں، اور میں نے ہدایات اچھی طرح پڑھ لی ہیں۔ میں خود بھی ان پر پوری طرح عمل کروں گا اور طالب علم سے بھی عمل کرواؤں گا۔',
+  },
+];
+
 const users: LoginUser[] = [
   { email: 'abdullahboss1900@gmail.com', password: 'Admin@1900', name: 'Abdullah Boss', role: 'admin', label: 'Admin', institutionId: 1 },
   { email: 'principal@madarsa.edu', password: 'Principal@123', name: 'Dr. Sameer Khan', role: 'principal', label: 'Principal', institutionId: 1 },
@@ -45,6 +105,7 @@ function App() {
   const [loginError, setLoginError] = useState('');
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [selectedInstitutionId, setSelectedInstitutionId] = useState(1);
+  const [instructionPage, setInstructionPage] = useState(0);
   const isAdminEmail = loginEmail.trim().toLowerCase() === 'abdullahboss1900@gmail.com';
   const selectedInstitution = useMemo(
     () => institutions.find((institution) => institution.id === selectedInstitutionId),
@@ -152,6 +213,11 @@ function App() {
                 </button>
               ))}
             </div>
+            <InstructionsPager
+              page={instructionPage}
+              pages={instructionPages}
+              onChange={setInstructionPage}
+            />
           </div>
 
           <div className="p-8">
@@ -298,5 +364,84 @@ function App() {
     </div>
   );
 }
+
+type InstructionsPagerProps = {
+  page: number;
+  pages: InstructionPage[];
+  onChange: (page: number) => void;
+};
+
+const InstructionsPager: React.FC<InstructionsPagerProps> = ({ page, pages, onChange }) => {
+  const current = pages[page];
+  const isRtl = current.direction === 'rtl';
+
+  return (
+    <div className="mt-6 rounded-lg bg-emerald-800 border border-emerald-600 overflow-hidden">
+      <div className="p-3 border-b border-emerald-600">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-white">Guardian Instructions</p>
+            <p className="text-xs text-emerald-100">Page {page + 1} of {pages.length} - {current.language}</p>
+          </div>
+          <div className="flex gap-1">
+            {pages.map((item, index) => (
+              <button
+                key={item.language}
+                type="button"
+                onClick={() => onChange(index)}
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                  page === index ? 'bg-white text-emerald-800' : 'bg-emerald-700 text-emerald-50 hover:bg-emerald-600'
+                }`}
+              >
+                {item.language}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div
+        dir={current.direction || 'ltr'}
+        className={`max-h-56 overflow-y-auto p-4 text-sm leading-6 text-emerald-50 ${isRtl ? 'text-right' : 'text-left'}`}
+      >
+        <h3 className="text-base font-bold text-white mb-3">{current.title}</h3>
+        <ul className={`space-y-2 ${isRtl ? 'list-disc pr-5' : 'list-disc pl-5'}`}>
+          {current.items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+        <div className="my-4 border-t border-emerald-500" />
+        <p>{current.declaration}</p>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 p-3 border-t border-emerald-600">
+        <button
+          type="button"
+          onClick={() => onChange(Math.max(page - 1, 0))}
+          disabled={page === 0}
+          className="px-3 py-1.5 rounded bg-emerald-700 text-xs font-medium text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-600"
+        >
+          Previous
+        </button>
+        <div className="flex gap-1">
+          {pages.map((item, index) => (
+            <span
+              key={item.title}
+              className={`h-2 w-2 rounded-full ${index === page ? 'bg-white' : 'bg-emerald-500'}`}
+            />
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange(Math.min(page + 1, pages.length - 1))}
+          disabled={page === pages.length - 1}
+          className="px-3 py-1.5 rounded bg-emerald-700 text-xs font-medium text-white disabled:opacity-40 disabled:cursor-not-allowed hover:bg-emerald-600"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export default App;
