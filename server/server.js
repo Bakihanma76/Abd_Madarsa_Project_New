@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -87,6 +88,96 @@ const normalize = (config, body) => {
   return data;
 };
 
+const roleLabels = {
+  admin: 'Admin',
+  principal: 'Principal',
+  teacher: 'Teacher',
+  student: 'Student',
+  parent: 'Parent',
+};
+
+const hashPassword = (password) => `sha256$${createHash('sha256').update(password).digest('hex')}`;
+
+const passwordMatches = (submittedPassword, storedPassword) => {
+  if (!storedPassword) return false;
+  if (storedPassword.startsWith('sha256$')) return hashPassword(submittedPassword) === storedPassword;
+  return submittedPassword === storedPassword;
+};
+
+const userPayload = (user) => ({
+  email: user.email,
+  name: user.name,
+  role: user.role,
+  label: roleLabels[user.role] || user.role,
+  institutionId: Number(user.institutionId || 1),
+  institutionName: user.institutionName || undefined,
+  linkedStudentName: user.linkedStudentName || undefined,
+  linkedTeacherName: user.linkedTeacherName || undefined,
+});
+
+const login = async (body) => {
+  const email = String(body.email || '').trim().toLowerCase();
+  const password = String(body.password || '');
+  const institutionId = Number(body.institutionId || 0);
+  if (!email || !password) throw new Error('Email and password are required');
+
+  const matches = await rows(`
+    SELECT users.*, institutions.name AS institutionName
+    FROM users
+    LEFT JOIN institutions ON institutions.id = users.institutionId
+    WHERE LOWER(users.email) = :email AND users.status = 'Active'
+    LIMIT 1
+  `, { email });
+  const user = matches[0];
+  if (!user || !passwordMatches(password, user.password)) throw new Error('Invalid email or password');
+
+  if (user.role === 'admin' && institutionId) {
+    const selected = await rows('SELECT id, name FROM institutions WHERE id = :institutionId AND status = :status LIMIT 1', {
+      institutionId,
+      status: 'Active',
+    });
+    if (!selected[0]) throw new Error('Selected institution is not active');
+    return userPayload({ ...user, institutionId, institutionName: selected[0].name });
+  }
+
+  return userPayload(user);
+};
+
+const register = async (body) => {
+  const name = String(body.name || '').trim();
+  const email = String(body.email || '').trim().toLowerCase();
+  const password = String(body.password || '');
+  const role = String(body.role || 'student');
+  const institutionId = Number(body.institutionId || 1);
+  const allowedRoles = ['teacher', 'student', 'parent'];
+
+  if (!name || !email || !password) throw new Error('Name, email, and password are required');
+  if (password.length < 6) throw new Error('Password must be at least 6 characters');
+  if (!allowedRoles.includes(role)) throw new Error('Only teacher, student, and parent registration is allowed');
+
+  const existing = await rows('SELECT id FROM users WHERE LOWER(email) = :email LIMIT 1', { email });
+  if (existing[0]) throw new Error('Email is already registered');
+
+  const institution = await rows('SELECT id, name FROM institutions WHERE id = :institutionId AND status = :status LIMIT 1', {
+    institutionId,
+    status: 'Active',
+  });
+  if (!institution[0]) throw new Error('Selected institution is not active');
+
+  const created = await insert('users', {
+    institutionId,
+    name,
+    email,
+    password: hashPassword(password),
+    role,
+    status: 'Active',
+    linkedStudentName: role === 'student' ? name : String(body.linkedStudentName || '').trim() || null,
+    linkedTeacherName: role === 'teacher' ? name : null,
+  });
+
+  return userPayload({ ...created, institutionName: institution[0].name });
+};
+
 const dashboard = async () => {
   const stats = {
     students: await scalar('SELECT COUNT(*) AS value FROM students'),
@@ -153,6 +244,8 @@ createServer(async (req, res) => {
     const parts = url.pathname.split('/').filter(Boolean);
     if (parts[0] !== 'api') return send(req, res, 404, { error: 'Not found' });
     if (parts[1] === 'health') return send(req, res, 200, { ok: true });
+    if (parts[1] === 'auth' && parts[2] === 'login' && req.method === 'POST') return send(req, res, 200, await login(await readBody(req)));
+    if (parts[1] === 'auth' && parts[2] === 'register' && req.method === 'POST') return send(req, res, 201, await register(await readBody(req)));
     if (parts[1] === 'debug' && parts[2] === 'db') return send(req, res, 200, await dbDebug());
     if (parts[1] === 'setup' && parts[2] === 'database') {
       const result = await setupDatabase(url);

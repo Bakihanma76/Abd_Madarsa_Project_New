@@ -9,10 +9,6 @@ import Reports from './components/Reports';
 import { apiRequest } from './api';
 import type { AppUser, Role } from './access';
 
-type LoginUser = AppUser & {
-  password: string;
-};
-
 type Institution = {
   id: number;
   name: string;
@@ -20,6 +16,9 @@ type Institution = {
   city?: string;
   status: string;
 };
+
+type AuthMode = 'signin' | 'register';
+type RegisterRole = 'teacher' | 'student' | 'parent';
 
 type InstructionPage = {
   title: string;
@@ -97,14 +96,6 @@ const instructionPages: InstructionPage[] = [
   },
 ];
 
-const users: LoginUser[] = [
-  { email: 'abdullahboss1900@gmail.com', password: 'Admin@1900', name: 'Abdullah Boss', role: 'admin', label: 'Admin', institutionId: 1 },
-  { email: 'principal@madarsa.edu', password: 'Principal@123', name: 'Dr. Sameer Khan', role: 'principal', label: 'Principal', institutionId: 1 },
-  { email: 'teacher@madarsa.edu', password: 'Teacher@123', name: 'Ustadha Fatima Al-Zahra', role: 'teacher', label: 'Teacher', institutionId: 1, linkedTeacherName: 'Ustadha Fatima Al-Zahra' },
-  { email: 'student@madarsa.edu', password: 'Student@123', name: 'Ahmed Hassan Ali', role: 'student', label: 'Student', institutionId: 1, linkedStudentName: 'Ahmed Hassan Ali' },
-  { email: 'parent@madarsa.edu', password: 'Parent@123', name: 'Hassan Ali', role: 'parent', label: 'Parent', institutionId: 1, linkedStudentName: 'Ahmed Hassan Ali' },
-];
-
 const permissions: Record<Role, string[]> = {
   admin: ['dashboard', 'students', 'teachers', 'courses', 'exams', 'reports'],
   principal: ['dashboard', 'students', 'teachers', 'courses', 'exams', 'reports'],
@@ -116,9 +107,15 @@ const permissions: Record<Role, string[]> = {
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
-  const [loginEmail, setLoginEmail] = useState('abdullahboss1900@gmail.com');
-  const [loginPassword, setLoginPassword] = useState('Admin@1900');
-  const [loginError, setLoginError] = useState('');
+  const [authMode, setAuthMode] = useState<AuthMode>('signin');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [registerName, setRegisterName] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [registerRole, setRegisterRole] = useState<RegisterRole>('student');
+  const [linkedStudentName, setLinkedStudentName] = useState('');
+  const [authError, setAuthError] = useState('');
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [selectedInstitutionId, setSelectedInstitutionId] = useState(1);
   const [instructionPage, setInstructionPage] = useState(0);
@@ -156,28 +153,54 @@ function App() {
     loadInstitutions();
   }, [selectedInstitutionId]);
 
-  const handleLogin = (event: React.FormEvent) => {
+  const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
-    const matchedUser = users.find((user) => user.email === loginEmail.trim() && user.password === loginPassword);
-    if (!matchedUser) {
-      setLoginError('Invalid email or password');
-      return;
+    setAuthError('');
+    try {
+      const user = await apiRequest<AppUser>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: loginEmail,
+          password: loginPassword,
+          institutionId: isAdminEmail ? selectedInstitutionId : undefined,
+        }),
+      });
+      setCurrentUser({
+        ...user,
+        institutionName: user.role === 'admin' ? selectedInstitution?.name || user.institutionName : user.institutionName,
+      });
+      setActiveTab('dashboard');
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Unable to sign in');
     }
+  };
 
-    const { password, ...safeUser } = matchedUser;
-    void password;
-    setCurrentUser({
-      ...safeUser,
-      institutionId: matchedUser.role === 'admin' ? selectedInstitutionId : matchedUser.institutionId,
-      institutionName: matchedUser.role === 'admin' ? selectedInstitution?.name : safeUser.institutionName,
-    });
-    setActiveTab('dashboard');
-    setLoginError('');
+  const handleRegister = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setAuthError('');
+    try {
+      const user = await apiRequest<AppUser>('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: registerName,
+          email: registerEmail,
+          password: registerPassword,
+          role: registerRole,
+          institutionId: selectedInstitutionId,
+          linkedStudentName: registerRole === 'parent' ? linkedStudentName : undefined,
+        }),
+      });
+      setCurrentUser(user);
+      setActiveTab('dashboard');
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Unable to register');
+    }
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     setActiveTab('dashboard');
+    setLoginPassword('');
   };
 
   const renderContent = () => {
@@ -210,25 +233,7 @@ function App() {
               <BookOpen className="w-7 h-7 text-emerald-700" />
             </div>
             <h1 className="text-3xl font-bold">Madarsa Management</h1>
-            <p className="text-emerald-50 mt-3">Role-based mock login for checking dashboards and permissions.</p>
-
-            <div className="mt-8 space-y-3">
-              {users.map((user) => (
-                <button
-                  key={user.email}
-                  onClick={() => {
-                    setLoginEmail(user.email);
-                    setLoginPassword(user.password);
-                    if (user.role === 'admin') setSelectedInstitutionId(institutions[0]?.id || 1);
-                    setLoginError('');
-                  }}
-                  className="w-full text-left p-3 rounded-lg bg-emerald-800 hover:bg-emerald-900 transition-colors"
-                >
-                  <p className="text-sm font-semibold">{user.label}: {user.email}</p>
-                  <p className="text-xs text-emerald-100">Password: {user.password}</p>
-                </button>
-              ))}
-            </div>
+            <p className="text-emerald-50 mt-3">Secure access for students, parents, teachers, principals, and admins.</p>
             <InstructionsPager
               page={instructionPage}
               pages={instructionPages}
@@ -237,62 +242,86 @@ function App() {
           </div>
 
           <div className="p-8">
-            <h2 className="text-2xl font-bold text-gray-900">Login</h2>
-            <p className="text-sm text-gray-600 mt-2">Use one of the seeded sample accounts.</p>
-
-            <form onSubmit={handleLogin} className="mt-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                <input
-                  type="email"
-                  value={loginEmail}
-                  onChange={(event) => setLoginEmail(event.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                <input
-                  type="password"
-                  value={loginPassword}
-                  onChange={(event) => setLoginPassword(event.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  required
-                />
-              </div>
-              {isAdminEmail && (
-                <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-lg">
-                  <label className="flex items-center space-x-2 text-sm font-medium text-emerald-900 mb-2">
-                    <Building2 className="w-4 h-4" />
-                    <span>Select University / School / Madarsa</span>
-                  </label>
-                  <select
-                    value={selectedInstitutionId}
-                    onChange={(event) => setSelectedInstitutionId(Number(event.target.value))}
-                    className="w-full px-3 py-2 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
-                  >
-                    {institutions.map((institution) => (
-                      <option key={institution.id} value={institution.id}>
-                        {institution.name} - {institution.type} - {institution.city || 'No city'}
-                      </option>
-                    ))}
-                  </select>
-                  {institutions.length === 0 && (
-                    <p className="text-xs text-red-700 mt-2">No active institutions found. Run database setup first.</p>
-                  )}
-                </div>
-              )}
-              {loginError && (
-                <div className="p-3 bg-red-50 border border-red-200 text-sm text-red-700 rounded-lg">{loginError}</div>
-              )}
+            <div className="flex rounded-lg bg-gray-100 p-1 mb-6">
               <button
-                type="submit"
-                className="w-full bg-emerald-600 text-white py-2 rounded-lg hover:bg-emerald-700 transition-colors font-medium"
+                type="button"
+                onClick={() => {
+                  setAuthMode('signin');
+                  setAuthError('');
+                }}
+                className={`flex-1 py-2 rounded-md text-sm font-medium ${authMode === 'signin' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-600'}`}
               >
                 Sign in
               </button>
-            </form>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode('register');
+                  setAuthError('');
+                }}
+                className={`flex-1 py-2 rounded-md text-sm font-medium ${authMode === 'register' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-600'}`}
+              >
+                Register
+              </button>
+            </div>
+
+            {authMode === 'signin' ? (
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Sign in</h2>
+                  <p className="text-sm text-gray-600 mt-2">Use your registered account.</p>
+                </div>
+                <TextField label="Email" type="email" value={loginEmail} onChange={setLoginEmail} />
+                <TextField label="Password" type="password" value={loginPassword} onChange={setLoginPassword} />
+                {isAdminEmail && (
+                  <InstitutionSelect
+                    institutions={institutions}
+                    selectedInstitutionId={selectedInstitutionId}
+                    setSelectedInstitutionId={setSelectedInstitutionId}
+                    label="Select University / School / Madarsa"
+                  />
+                )}
+                {authError && <div className="p-3 bg-red-50 border border-red-200 text-sm text-red-700 rounded-lg">{authError}</div>}
+                <button type="submit" className="w-full bg-emerald-600 text-white py-2 rounded-lg hover:bg-emerald-700 transition-colors font-medium">
+                  Sign in
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleRegister} className="space-y-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Create account</h2>
+                  <p className="text-sm text-gray-600 mt-2">Register as a student, parent, or teacher.</p>
+                </div>
+                <TextField label="Full name" value={registerName} onChange={setRegisterName} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <TextField label="Email" type="email" value={registerEmail} onChange={setRegisterEmail} />
+                  <TextField label="Password" type="password" value={registerPassword} onChange={setRegisterPassword} minLength={6} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Account type</label>
+                  <select
+                    value={registerRole}
+                    onChange={(event) => setRegisterRole(event.target.value as RegisterRole)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  >
+                    <option value="student">Student</option>
+                    <option value="parent">Parent</option>
+                    <option value="teacher">Teacher</option>
+                  </select>
+                </div>
+                <InstitutionSelect
+                  institutions={institutions}
+                  selectedInstitutionId={selectedInstitutionId}
+                  setSelectedInstitutionId={setSelectedInstitutionId}
+                  label="Institution"
+                />
+                {registerRole === 'parent' && <TextField label="Linked student name" value={linkedStudentName} onChange={setLinkedStudentName} />}
+                {authError && <div className="p-3 bg-red-50 border border-red-200 text-sm text-red-700 rounded-lg">{authError}</div>}
+                <button type="submit" className="w-full bg-emerald-600 text-white py-2 rounded-lg hover:bg-emerald-700 transition-colors font-medium">
+                  Create account
+                </button>
+              </form>
+            )}
           </div>
         </div>
       </div>
@@ -386,6 +415,57 @@ type InstructionsPagerProps = {
   pages: InstructionPage[];
   onChange: (page: number) => void;
 };
+
+type TextFieldProps = {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  minLength?: number;
+};
+
+const TextField: React.FC<TextFieldProps> = ({ label, value, onChange, type = 'text', minLength }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+    <input
+      type={type}
+      value={value}
+      minLength={minLength}
+      onChange={(event) => onChange(event.target.value)}
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+      required
+    />
+  </div>
+);
+
+type InstitutionSelectProps = {
+  institutions: Institution[];
+  selectedInstitutionId: number;
+  setSelectedInstitutionId: (id: number) => void;
+  label: string;
+};
+
+const InstitutionSelect: React.FC<InstitutionSelectProps> = ({ institutions, selectedInstitutionId, setSelectedInstitutionId, label }) => (
+  <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-lg">
+    <label className="flex items-center space-x-2 text-sm font-medium text-emerald-900 mb-2">
+      <Building2 className="w-4 h-4" />
+      <span>{label}</span>
+    </label>
+    <select
+      value={selectedInstitutionId}
+      onChange={(event) => setSelectedInstitutionId(Number(event.target.value))}
+      className="w-full px-3 py-2 border border-emerald-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+      required
+    >
+      {institutions.map((institution) => (
+        <option key={institution.id} value={institution.id}>
+          {institution.name} - {institution.type} - {institution.city || 'No city'}
+        </option>
+      ))}
+    </select>
+    {institutions.length === 0 && <p className="text-xs text-red-700 mt-2">No active institutions found. Run database setup first.</p>}
+  </div>
+);
 
 const InstructionsPager: React.FC<InstructionsPagerProps> = ({ page, pages, onChange }) => {
   const current = pages[page];
