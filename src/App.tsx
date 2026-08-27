@@ -229,11 +229,13 @@ function App() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 bg-white rounded-lg shadow-sm overflow-hidden">
           <div className="p-8 bg-emerald-700 text-white">
-            <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center mb-6">
-              <BookOpen className="w-7 h-7 text-emerald-700" />
+            <div className="flex items-center gap-4 mb-6">
+              <img src="/madarsa-logo.png" alt="Madarsa Uloom Ul Quran Abdullagutta" className="h-14 w-14 shrink-0 rounded-full bg-white object-contain p-1 ring-1 ring-white/70" />
+              <div className="min-w-0">
+                <h1 className="text-3xl font-bold leading-tight">Madarsa Management</h1>
+                <p className="text-emerald-50 mt-2">Secure access for students, parents, teachers, principals, and admins.</p>
+              </div>
             </div>
-            <h1 className="text-3xl font-bold">Madarsa Management</h1>
-            <p className="text-emerald-50 mt-3">Secure access for students, parents, teachers, principals, and admins.</p>
             <InstructionsPager
               page={instructionPage}
               pages={instructionPages}
@@ -334,9 +336,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-emerald-600 rounded-lg flex items-center justify-center">
-                <BookOpen className="w-7 h-7 text-white" />
-              </div>
+              <img src="/madarsa-logo.png" alt="Madarsa Uloom Ul Quran Abdullagutta" className="h-12 w-12 shrink-0 rounded-full bg-white object-contain p-1 ring-1 ring-emerald-200" />
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Madarsa Management</h1>
                 <p className="text-sm text-gray-600">Academic Excellence System</p>
