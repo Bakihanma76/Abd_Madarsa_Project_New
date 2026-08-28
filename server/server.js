@@ -164,6 +164,16 @@ const register = async (body) => {
   });
   if (!institution[0]) throw new Error('Selected institution is not active');
 
+  let linkedStudentName = role === 'student' ? name : String(body.linkedStudentName || '').trim() || null;
+  if (role === 'parent') {
+    if (!linkedStudentName) throw new Error('Parent registration requires a linked student');
+    const [linkedStudent] = await rows('SELECT name, grade, guardianName FROM students WHERE institutionId = :institutionId AND name = :linkedStudentName LIMIT 1', {
+      institutionId,
+      linkedStudentName,
+    });
+    if (!linkedStudent) throw new Error('Linked student must exist in the selected institution');
+  }
+
   const created = await insert('users', {
     institutionId,
     name,
@@ -171,9 +181,22 @@ const register = async (body) => {
     password: hashPassword(password),
     role,
     status: 'Active',
-    linkedStudentName: role === 'student' ? name : String(body.linkedStudentName || '').trim() || null,
+    linkedStudentName,
     linkedTeacherName: role === 'teacher' ? name : null,
   });
+
+  if (role === 'parent') {
+    await insert('notifications', {
+      institutionId,
+      recipientRole: 'admin',
+      recipientName: null,
+      title: 'Parent verification required',
+      message: name + ' (' + email + ') registered as parent for ' + linkedStudentName + '. Please manually verify the parent-child relationship.',
+      status: 'Unread',
+      relatedType: 'parent_registration',
+      relatedId: created.id,
+    });
+  }
 
   return userPayload({ ...created, institutionName: institution[0].name });
 };

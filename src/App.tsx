@@ -21,6 +21,15 @@ type Institution = {
 type AuthMode = 'signin' | 'register';
 type RegisterRole = 'teacher' | 'student' | 'parent';
 
+type StudentOption = {
+  id: number;
+  institutionId?: number;
+  name: string;
+  grade: string;
+  guardianName: string;
+  status: string;
+};
+
 type InstructionPage = {
   title: string;
   language: string;
@@ -118,12 +127,17 @@ function App() {
   const [linkedStudentName, setLinkedStudentName] = useState('');
   const [authError, setAuthError] = useState('');
   const [institutions, setInstitutions] = useState<Institution[]>([]);
+  const [registerStudents, setRegisterStudents] = useState<StudentOption[]>([]);
   const [selectedInstitutionId, setSelectedInstitutionId] = useState(1);
   const [instructionPage, setInstructionPage] = useState(0);
   const isAdminEmail = loginEmail.trim().toLowerCase() === 'abdullahboss1900@gmail.com';
   const selectedInstitution = useMemo(
     () => institutions.find((institution) => institution.id === selectedInstitutionId),
     [institutions, selectedInstitutionId],
+  );
+  const activeRegisterStudents = useMemo(
+    () => registerStudents.filter((student) => student.status === 'Active' && (!student.institutionId || Number(student.institutionId) === Number(selectedInstitutionId))),
+    [registerStudents, selectedInstitutionId],
   );
 
   const tabs = [
@@ -155,6 +169,27 @@ function App() {
     loadInstitutions();
   }, [selectedInstitutionId]);
 
+  useEffect(() => {
+    const loadRegisterStudents = async () => {
+      if (authMode !== 'register' || registerRole !== 'parent') return;
+      try {
+        const data = await apiRequest<StudentOption[]>('/students');
+        setRegisterStudents(data);
+      } catch {
+        setRegisterStudents([]);
+      }
+    };
+
+    loadRegisterStudents();
+  }, [authMode, registerRole, selectedInstitutionId]);
+
+  useEffect(() => {
+    if (registerRole === 'parent' && activeRegisterStudents.length > 0 && !activeRegisterStudents.some((student) => student.name === linkedStudentName)) {
+      setLinkedStudentName(activeRegisterStudents[0].name);
+    }
+    if (registerRole !== 'parent' && linkedStudentName) setLinkedStudentName('');
+  }, [activeRegisterStudents, linkedStudentName, registerRole]);
+
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
     setAuthError('');
@@ -180,6 +215,10 @@ function App() {
   const handleRegister = async (event: React.FormEvent) => {
     event.preventDefault();
     setAuthError('');
+    if (registerRole === 'parent' && !linkedStudentName) {
+      setAuthError('Parent registration requires selecting an existing student.');
+      return;
+    }
     try {
       const user = await apiRequest<AppUser>('/auth/register', {
         method: 'POST',
@@ -307,7 +346,11 @@ function App() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Account type</label>
                   <select
                     value={registerRole}
-                    onChange={(event) => setRegisterRole(event.target.value as RegisterRole)}
+                    onChange={(event) => {
+                      const nextRole = event.target.value as RegisterRole;
+                      setRegisterRole(nextRole);
+                      setLinkedStudentName('');
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   >
                     <option value="student">Student</option>
@@ -321,7 +364,23 @@ function App() {
                   setSelectedInstitutionId={setSelectedInstitutionId}
                   label="Institution"
                 />
-                {registerRole === 'parent' && <TextField label="Linked student name" value={linkedStudentName} onChange={setLinkedStudentName} />}
+                {registerRole === 'parent' && (
+                  <div className="p-4 bg-amber-50 border border-amber-100 rounded-lg">
+                    <label className="block text-sm font-medium text-amber-900 mb-2">Linked student from registered list</label>
+                    <select
+                      value={linkedStudentName}
+                      onChange={(event) => setLinkedStudentName(event.target.value)}
+                      className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                      required
+                    >
+                      {activeRegisterStudents.length === 0 && <option value="">No active students found for this institution</option>}
+                      {activeRegisterStudents.map((student) => (
+                        <option key={student.id} value={student.name}>{student.name} - {student.grade} - Guardian: {student.guardianName}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-amber-800 mt-2">Admin will receive a notification to manually verify this parent-child relationship.</p>
+                  </div>
+                )}
                 {authError && <div className="p-3 bg-red-50 border border-red-200 text-sm text-red-700 rounded-lg">{authError}</div>}
                 <button type="submit" className="w-full bg-emerald-600 text-white py-2 rounded-lg hover:bg-emerald-700 transition-colors font-medium">
                   Create account

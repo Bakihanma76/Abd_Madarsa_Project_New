@@ -54,6 +54,36 @@ const run = async () => {
   await request('/reports?type=financial&role=student&institutionId=1&studentName=Ahmed%20Hassan%20Ali', 403);
   await request('/reports?type=enrollment&role=teacher&institutionId=1', 403);
 
+  const parentEmail = 'parent.verify.' + Date.now() + '@sample.local';
+  const registeredParent = await request('/auth/register', 201, {
+    method: 'POST',
+    body: JSON.stringify({
+      institutionId: 1,
+      name: 'Verification Parent',
+      email: parentEmail,
+      password: 'Parent@123',
+      role: 'parent',
+      linkedStudentName: 'Ahmed Hassan Ali',
+    }),
+  });
+  assert(registeredParent.role === 'parent', 'Parent registration should succeed with an existing linked student');
+  assert(registeredParent.linkedStudentName === 'Ahmed Hassan Ali', 'Parent should be linked to selected student');
+
+  await request('/auth/register', 500, {
+    method: 'POST',
+    body: JSON.stringify({
+      institutionId: 1,
+      name: 'Invalid Parent',
+      email: 'invalid.parent.' + Date.now() + '@sample.local',
+      password: 'Parent@123',
+      role: 'parent',
+      linkedStudentName: 'Missing Student',
+    }),
+  });
+
+  const adminNotifications = await request('/notifications?role=admin&institutionId=1');
+  assert(adminNotifications.some((note) => note.title === 'Parent verification required' && note.message.includes(parentEmail)), 'Admin should receive parent verification notification');
+
   const leave = await request('/leave-requests', 201, {
     method: 'POST',
     body: JSON.stringify({
