@@ -1,4 +1,4 @@
-import { createServer } from 'node:http';
+﻿import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { execFile } from 'node:child_process';
@@ -178,6 +178,149 @@ const register = async (body) => {
   return userPayload({ ...created, institutionName: institution[0].name });
 };
 
+const leaveRequestPayload = async (body) => {
+  const studentName = String(body.studentName || '').trim();
+  const institutionId = Number(body.institutionId || 1);
+  if (!studentName) throw new Error('Student name is required');
+  if (!body.startDate || !body.endDate) throw new Error('Start date and end date are required');
+  if (!String(body.reason || '').trim()) throw new Error('Leave reason is required');
+
+  const [student] = await rows('SELECT grade, guardianName FROM students WHERE institutionId = :institutionId AND name = :studentName LIMIT 1', {
+    institutionId,
+    studentName,
+  });
+
+  return {
+    institutionId,
+    studentName,
+    grade: student?.grade || String(body.grade || 'Unassigned'),
+    requesterRole: body.requesterRole === 'parent' ? 'parent' : 'student',
+    requesterName: String(body.requesterName || studentName).trim(),
+    startDate: body.startDate,
+    endDate: body.endDate,
+    reason: String(body.reason || '').trim(),
+    status: 'Pending',
+    teacherName: String(body.teacherName || '').trim() || null,
+    teacherResponse: null,
+    decidedBy: null,
+    decidedAt: null,
+  };
+};
+
+const leaveRequests = async (url) => {
+  const role = url.searchParams.get('role') || 'admin';
+  const institutionId = Number(url.searchParams.get('institutionId') || 1);
+  const studentName = url.searchParams.get('studentName') || '';
+  const teacherName = url.searchParams.get('teacherName') || '';
+  const conditions = ['institutionId = :institutionId'];
+  const params = { institutionId };
+
+  if (role === 'student' || role === 'parent') {
+    conditions.push('studentName = :studentName');
+    params.studentName = studentName;
+  }
+
+  if (role === 'teacher' && teacherName) {
+    conditions.push("(teacherName = :teacherName OR teacherName IS NULL OR teacherName = '')");
+    params.teacherName = teacherName;
+  }
+
+  const sql = 'SELECT * FROM leave_requests WHERE ' + conditions.join(' AND ') + ' ORDER BY createdAt DESC, id DESC';
+  return rows(sql, params);
+};
+
+const createLeaveRequest = async (body) => {
+  const payload = await leaveRequestPayload(body);
+  const request = await insert('leave_requests', payload);
+  await insert('notifications', {
+    institutionId: payload.institutionId,
+    recipientRole: 'teacher',
+    recipientName: payload.teacherName,
+    title: 'New leave request',
+    message: payload.studentName + ' requested leave from ' + payload.startDate + ' to ' + payload.endDate + '. Reason: ' + payload.reason,
+    status: 'Unread',
+    relatedType: 'leave_request',
+    relatedId: request.id,
+  });
+  return request;
+};
+
+const decideLeaveRequest = async (id, body) => {
+  const status = body.status === 'Approved' ? 'Approved' : body.status === 'Rejected' ? 'Rejected' : '';
+  if (!status) throw new Error('Decision must be Approved or Rejected');
+
+  const existing = await one('leave_requests', id);
+  if (!existing) throw new Error('Leave request not found');
+
+  const decided = await update('leave_requests', id, {
+    institutionId: existing.institutionId,
+    studentName: existing.studentName,
+    grade: existing.grade,
+    requesterRole: existing.requesterRole,
+    requesterName: existing.requesterName,
+    startDate: existing.startDate,
+    endDate: existing.endDate,
+    reason: existing.reason,
+    status,
+    teacherName: existing.teacherName || String(body.teacherName || '').trim() || null,
+    teacherResponse: String(body.teacherResponse || '').trim() || null,
+    decidedBy: String(body.decidedBy || '').trim() || null,
+    decidedAt: new Date(),
+  });
+
+  const [student] = await rows('SELECT guardianName FROM students WHERE institutionId = :institutionId AND name = :studentName LIMIT 1', {
+    institutionId: existing.institutionId,
+    studentName: existing.studentName,
+  });
+  const parentName = student?.guardianName || null;
+  const responseText = decided.teacherResponse ? ' Teacher note: ' + decided.teacherResponse : '';
+  const message = 'Leave request for ' + existing.studentName + ' from ' + existing.startDate + ' to ' + existing.endDate + ' was ' + status.toLowerCase() + '.' + responseText;
+
+  await insert('notifications', {
+    institutionId: existing.institutionId,
+    recipientRole: 'parent',
+    recipientName: parentName,
+    title: 'Leave ' + status,
+    message,
+    status: 'Unread',
+    relatedType: 'leave_request',
+    relatedId: id,
+  });
+
+  await insert('notifications', {
+    institutionId: existing.institutionId,
+    recipientRole: 'student',
+    recipientName: existing.studentName,
+    title: 'Leave ' + status,
+    message,
+    status: 'Unread',
+    relatedType: 'leave_request',
+    relatedId: id,
+  });
+
+  return decided;
+};
+
+const notifications = async (url) => {
+  const role = url.searchParams.get('role') || 'admin';
+  const institutionId = Number(url.searchParams.get('institutionId') || 1);
+  const recipientName = url.searchParams.get('recipientName') || '';
+  const conditions = ['institutionId = :institutionId'];
+  const params = { institutionId };
+
+  if (role !== 'admin' && role !== 'principal') {
+    conditions.push('recipientRole = :role');
+    params.role = role;
+    if (recipientName) {
+      conditions.push('(recipientName = :recipientName OR recipientName IS NULL)');
+      params.recipientName = recipientName;
+    }
+  }
+
+  const sql = 'SELECT * FROM notifications WHERE ' + conditions.join(' AND ') + ' ORDER BY createdAt DESC, id DESC LIMIT 50';
+  return rows(sql, params);
+};
+
 const dashboard = async () => {
   const stats = {
     students: await scalar('SELECT COUNT(*) AS value FROM students'),
@@ -252,6 +395,10 @@ createServer(async (req, res) => {
       return send(req, res, result.status, result.payload);
     }
     if (parts[1] === 'dashboard') return send(req, res, 200, await dashboard());
+    if (parts[1] === 'leave-requests' && req.method === 'GET') return send(req, res, 200, await leaveRequests(url));
+    if (parts[1] === 'leave-requests' && req.method === 'POST') return send(req, res, 201, await createLeaveRequest(await readBody(req)));
+    if (parts[1] === 'leave-requests' && parts[3] === 'decision' && req.method === 'PUT') return send(req, res, 200, await decideLeaveRequest(Number(parts[2]), await readBody(req)));
+    if (parts[1] === 'notifications' && req.method === 'GET') return send(req, res, 200, await notifications(url));
     if (parts[1] === 'reports') {
       const type = url.searchParams.get('type') || 'academic';
       const role = url.searchParams.get('role') || 'admin';
@@ -287,3 +434,4 @@ createServer(async (req, res) => {
 }).listen(port, () => {
   console.log(`Backend API running at http://localhost:${port}`);
 });
+

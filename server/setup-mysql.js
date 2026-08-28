@@ -143,6 +143,37 @@ await connection.query(`
     totalMarks DECIMAL(6,2) NOT NULL,
     resultDate DATE NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS leave_requests (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    institutionId INT NOT NULL DEFAULT 1,
+    studentName VARCHAR(255) NOT NULL,
+    grade VARCHAR(100) NOT NULL DEFAULT 'Unassigned',
+    requesterRole ENUM('student', 'parent') NOT NULL,
+    requesterName VARCHAR(255) NOT NULL,
+    startDate DATE NOT NULL,
+    endDate DATE NOT NULL,
+    reason TEXT NOT NULL,
+    status ENUM('Pending', 'Approved', 'Rejected') NOT NULL DEFAULT 'Pending',
+    teacherName VARCHAR(255),
+    teacherResponse TEXT,
+    decidedBy VARCHAR(255),
+    decidedAt DATETIME,
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS notifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    institutionId INT NOT NULL DEFAULT 1,
+    recipientRole ENUM('student', 'parent', 'teacher', 'principal', 'admin') NOT NULL,
+    recipientName VARCHAR(255),
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    status ENUM('Unread', 'Read') NOT NULL DEFAULT 'Unread',
+    relatedType VARCHAR(100),
+    relatedId INT,
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 const addColumnIfMissing = async (table, column, definition) => {
@@ -160,7 +191,7 @@ const addColumnIfMissing = async (table, column, definition) => {
   }
 };
 
-for (const table of ['users', 'students', 'teachers', 'courses', 'exams']) {
+for (const table of ['users', 'students', 'teachers', 'courses', 'exams', 'leave_requests', 'notifications']) {
   await addColumnIfMissing(table, 'institutionId', 'INT NOT NULL DEFAULT 1 AFTER id');
   await connection.query(`UPDATE \`${table}\` SET institutionId = 1 WHERE institutionId IS NULL`);
 }
@@ -250,6 +281,16 @@ await seed('courses', [
   { name: 'Islamic History & Civilization', grade: 'Grade 5-6', teacher: 'Sheikh Omar Ibn Khalid', students: 28, duration: '100 hours', schedule: 'Sun-Thu 11:30 AM-12:30 PM', status: 'Active', description: 'History of Islamic civilization and notable figures' },
   { name: 'Hadith Studies Advanced', grade: 'Grade 7-8', teacher: 'Ustadha Aisha Mahmoud', students: 18, duration: '150 hours', schedule: 'Sun-Thu 2:00-3:30 PM', status: 'Active', description: 'Advanced study of Prophetic traditions' },
   { name: 'Fiqh & Islamic Law', grade: 'Grade 6-8', teacher: 'Dr. Hassan Al-Qadri', students: 20, duration: '180 hours', schedule: 'Mon-Wed 1:00-2:30 PM', status: 'Pending', description: 'Islamic jurisprudence and legal principles' },
+]);
+
+await seed('leave_requests', [
+  { institutionId: 1, studentName: 'Ahmed Hassan Ali', grade: 'Grade 5', requesterRole: 'parent', requesterName: 'Hassan Ali', startDate: '2026-08-29', endDate: '2026-08-30', reason: 'Family medical appointment', status: 'Pending', teacherName: 'Ustadha Fatima Al-Zahra' },
+  { institutionId: 1, studentName: 'Fatima Muhammad', grade: 'Grade 3', requesterRole: 'student', requesterName: 'Fatima Muhammad', startDate: '2026-08-26', endDate: '2026-08-26', reason: 'Fever and doctor advised rest', status: 'Approved', teacherName: 'Ustadha Fatima Al-Zahra', teacherResponse: 'Approved. Please submit missed classwork after returning.', decidedBy: 'Ustadha Fatima Al-Zahra', decidedAt: '2026-08-25 10:00:00' },
+]);
+
+await seed('notifications', [
+  { institutionId: 1, recipientRole: 'parent', recipientName: 'Hassan Ali', title: 'Leave request pending', message: 'Leave request for Ahmed Hassan Ali is waiting for teacher approval.', status: 'Unread', relatedType: 'leave_request', relatedId: 1 },
+  { institutionId: 1, recipientRole: 'student', recipientName: 'Ahmed Hassan Ali', title: 'Leave request submitted', message: 'Your leave request has been submitted to the teacher.', status: 'Unread', relatedType: 'leave_request', relatedId: 1 },
 ]);
 
 await seed('exams', [

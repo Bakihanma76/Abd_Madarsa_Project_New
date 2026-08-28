@@ -1,11 +1,14 @@
 const baseUrl = process.env.API_BASE || 'http://localhost:3001/api';
 
-const request = async (path, expectedStatus = 200) => {
-  const response = await fetch(`${baseUrl}${path}`);
+const request = async (path, expectedStatus = 200, options = {}) => {
+  const response = await fetch(baseUrl + path, {
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options,
+  });
   const text = await response.text();
   const body = text ? JSON.parse(text) : null;
   if (response.status !== expectedStatus) {
-    throw new Error(`${path} expected ${expectedStatus}, received ${response.status}: ${text}`);
+    throw new Error(path + ' expected ' + expectedStatus + ', received ' + response.status + ': ' + text);
   }
   return body;
 };
@@ -24,11 +27,11 @@ const run = async () => {
   const courses = await request('/courses');
   const exams = await request('/exams');
 
-  assert(institutions.length >= 3, `Expected at least 3 institutions, got ${institutions.length}`);
-  assert(students.length >= 120, `Expected at least 120 students, got ${students.length}`);
-  assert(teachers.length >= 35, `Expected at least 35 teachers, got ${teachers.length}`);
-  assert(courses.length >= 30, `Expected at least 30 courses, got ${courses.length}`);
-  assert(exams.length >= 30, `Expected at least 30 exams, got ${exams.length}`);
+  assert(institutions.length >= 3, 'Expected at least 3 institutions, got ' + institutions.length);
+  assert(students.length >= 120, 'Expected at least 120 students, got ' + students.length);
+  assert(teachers.length >= 35, 'Expected at least 35 teachers, got ' + teachers.length);
+  assert(courses.length >= 30, 'Expected at least 30 courses, got ' + courses.length);
+  assert(exams.length >= 30, 'Expected at least 30 exams, got ' + exams.length);
 
   const adminFinancial = await request('/reports?type=financial&role=admin&institutionId=1');
   assert(adminFinancial.summary.totalRevenue > 0, 'Admin financial report should have revenue');
@@ -50,6 +53,34 @@ const run = async () => {
 
   await request('/reports?type=financial&role=student&institutionId=1&studentName=Ahmed%20Hassan%20Ali', 403);
   await request('/reports?type=enrollment&role=teacher&institutionId=1', 403);
+
+  const leave = await request('/leave-requests', 201, {
+    method: 'POST',
+    body: JSON.stringify({
+      institutionId: 1,
+      studentName: 'Ahmed Hassan Ali',
+      requesterRole: 'parent',
+      requesterName: 'Hassan Ali',
+      startDate: '2026-09-04',
+      endDate: '2026-09-04',
+      reason: 'Family appointment',
+    }),
+  });
+  assert(leave.status === 'Pending', 'New leave request should be pending');
+
+  const decidedLeave = await request('/leave-requests/' + leave.id + '/decision', 200, {
+    method: 'PUT',
+    body: JSON.stringify({
+      status: 'Rejected',
+      teacherName: 'Ustadha Fatima Al-Zahra',
+      decidedBy: 'Ustadha Fatima Al-Zahra',
+      teacherResponse: 'Please choose a non-exam day.',
+    }),
+  });
+  assert(decidedLeave.status === 'Rejected', 'Teacher decision should update leave request');
+
+  const parentNotifications = await request('/notifications?role=parent&institutionId=1&recipientName=Hassan%20Ali');
+  assert(parentNotifications.some((note) => note.relatedId === leave.id && note.title === 'Leave Rejected'), 'Parent should receive leave decision notification');
 
   console.log('API E2E checks passed.');
 };

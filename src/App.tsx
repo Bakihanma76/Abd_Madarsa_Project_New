@@ -1,11 +1,12 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
-import { BookOpen, Users, GraduationCap, FileText, BarChart3, Home, LogOut, ShieldCheck, Building2 } from 'lucide-react';
+import { BookOpen, Users, GraduationCap, FileText, BarChart3, Home, LogOut, ShieldCheck, Building2, CalendarCheck } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import Students from './components/Students';
 import Teachers from './components/Teachers';
 import Courses from './components/Courses';
 import Exams from './components/Exams';
 import Reports from './components/Reports';
+import LeaveRequests from './components/LeaveRequests';
 import { apiRequest } from './api';
 import type { AppUser, Role } from './access';
 
@@ -97,11 +98,11 @@ const instructionPages: InstructionPage[] = [
 ];
 
 const permissions: Record<Role, string[]> = {
-  admin: ['dashboard', 'students', 'teachers', 'courses', 'exams', 'reports'],
-  principal: ['dashboard', 'students', 'teachers', 'courses', 'exams', 'reports'],
-  teacher: ['dashboard', 'students', 'courses', 'exams', 'reports'],
-  student: ['dashboard', 'courses', 'exams', 'reports'],
-  parent: ['dashboard', 'students', 'exams', 'reports'],
+  admin: ['dashboard', 'students', 'teachers', 'courses', 'exams', 'reports', 'leave'],
+  principal: ['dashboard', 'students', 'teachers', 'courses', 'exams', 'reports', 'leave'],
+  teacher: ['dashboard', 'students', 'courses', 'exams', 'reports', 'leave'],
+  student: ['dashboard', 'courses', 'exams', 'reports', 'leave'],
+  parent: ['dashboard', 'students', 'exams', 'reports', 'leave'],
 };
 
 function App() {
@@ -132,6 +133,7 @@ function App() {
     { id: 'courses', label: 'Courses', icon: BookOpen },
     { id: 'exams', label: 'Exams', icon: FileText },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
+    { id: 'leave', label: 'Leave', icon: CalendarCheck },
   ];
 
   const visibleTabs = currentUser ? tabs.filter((tab) => permissions[currentUser.role].includes(tab.id)) : [];
@@ -219,6 +221,8 @@ function App() {
         return <Exams user={currentUser} />;
       case 'reports':
         return <Reports user={currentUser} />;
+      case 'leave':
+        return <LeaveRequests user={currentUser} />;
       default:
         return <Dashboard user={currentUser} />;
     }
