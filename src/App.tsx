@@ -537,18 +537,18 @@ const InstructionsPager: React.FC<InstructionsPagerProps> = ({ page, pages, onCh
   return (
     <div className="mt-6 rounded-lg bg-emerald-800 border border-emerald-600 overflow-hidden">
       <div className="p-3 border-b border-emerald-600">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold text-white">Guardian Instructions</p>
             <p className="text-xs text-emerald-100">Page {page + 1} of {pages.length} - {current.language}</p>
           </div>
-          <div className="flex gap-1">
+          <div className="flex w-full flex-wrap gap-1 sm:w-auto sm:justify-end">
             {pages.map((item, index) => (
               <button
                 key={item.language}
                 type="button"
                 onClick={() => onChange(index)}
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                className={`min-h-8 px-2 py-1 rounded text-xs font-medium transition-colors ${
                   page === index ? 'bg-white text-emerald-800' : 'bg-emerald-700 text-emerald-50 hover:bg-emerald-600'
                 }`}
               >
@@ -561,16 +561,16 @@ const InstructionsPager: React.FC<InstructionsPagerProps> = ({ page, pages, onCh
 
       <div
         dir={current.direction || 'ltr'}
-        className={`max-h-56 overflow-y-auto p-4 text-sm leading-6 text-emerald-50 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`max-h-[52vh] overflow-y-auto p-4 text-sm leading-6 text-emerald-50 break-words [overflow-wrap:anywhere] sm:max-h-64 ${isRtl ? 'text-right' : 'text-left'}`}
       >
-        <h3 className="text-base font-bold text-white mb-3">{current.title}</h3>
+        <h3 className="text-base font-bold text-white mb-3 break-words">{current.title}</h3>
         <ul className={`space-y-2 ${isRtl ? 'list-disc pr-5' : 'list-disc pl-5'}`}>
           {current.items.map((item) => (
             <li key={item}>{item}</li>
           ))}
         </ul>
         <div className="my-4 border-t border-emerald-500" />
-        <p>{current.declaration}</p>
+        <p className="break-words">{current.declaration}</p>
       </div>
 
       <div className="flex items-center justify-between gap-3 p-3 border-t border-emerald-600">
