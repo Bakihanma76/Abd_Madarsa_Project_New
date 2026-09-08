@@ -110,7 +110,7 @@ const permissions: Record<Role, string[]> = {
   admin: ['dashboard', 'students', 'teachers', 'courses', 'exams', 'reports', 'leave'],
   principal: ['dashboard', 'students', 'teachers', 'courses', 'exams', 'reports', 'leave'],
   teacher: ['dashboard', 'students', 'courses', 'exams', 'reports', 'leave'],
-  student: ['dashboard', 'courses', 'exams', 'reports', 'leave'],
+  student: ['dashboard', 'exams', 'reports', 'leave'],
   parent: ['dashboard', 'students', 'exams', 'reports', 'leave'],
 };
 
@@ -604,4 +604,5 @@ const InstructionsPager: React.FC<InstructionsPagerProps> = ({ page, pages, onCh
 };
 
 export default App;
+
 
