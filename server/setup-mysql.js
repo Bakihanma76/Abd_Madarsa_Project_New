@@ -1,4 +1,4 @@
-import 'dotenv/config';
+﻿import 'dotenv/config';
 import mysql from 'mysql2/promise';
 import { dbConfig, dbName } from './db-config.js';
 
@@ -196,6 +196,30 @@ for (const table of ['users', 'students', 'teachers', 'courses', 'exams', 'leave
   await connection.query(`UPDATE \`${table}\` SET institutionId = 1 WHERE institutionId IS NULL`);
 }
 await connection.query("ALTER TABLE institutions MODIFY type ENUM('university', 'school', 'madarsa') NOT NULL DEFAULT 'madarsa'");
+
+const backfillRegisteredStudents = async () => {
+  const [studentUsers] = await connection.query(`
+    SELECT users.id, users.institutionId, users.name, users.email
+    FROM users
+    LEFT JOIN students ON students.institutionId = users.institutionId AND (LOWER(students.email) = LOWER(users.email) OR students.name = users.name)
+    WHERE users.role = 'student' AND students.id IS NULL
+  `);
+
+  for (const user of studentUsers) {
+    const [result] = await connection.execute(
+      `INSERT INTO students (institutionId, name, grade, age, guardianName, phone, email, address, admissionDate, emergencyContact, medicalInfo, status, subjects)
+       VALUES (?, ?, 'Pending Assignment', 0, 'Pending Verification', 'Pending', ?, '', CURDATE(), '', '', 'Pending', 0)`,
+      [user.institutionId || 1, user.name, user.email],
+    );
+    await connection.execute(
+      `INSERT INTO notifications (institutionId, recipientRole, recipientName, title, message, status, relatedType, relatedId)
+       VALUES (?, 'admin', NULL, 'Student verification required', ?, 'Unread', 'student_registration', ?)`,
+      [user.institutionId || 1, `${user.name} (${user.email}) registered as a student. Please verify details and assign grade/courses manually.`, result.insertId],
+    );
+  }
+};
+
+await backfillRegisteredStudents();
 
 const seed = async (table, rows) => {
   const [[{ count }]] = await connection.query(`SELECT COUNT(*) AS count FROM \`${table}\``);
@@ -580,3 +604,4 @@ await seedInstitutionScenario(4, 'University', 400);
 
 await connection.end();
 console.log(`MySQL database '${dbName}' is ready with dynamic multi-institution sample data.`);
+

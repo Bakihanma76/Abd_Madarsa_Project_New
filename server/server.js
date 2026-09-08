@@ -185,6 +185,45 @@ const register = async (body) => {
     linkedTeacherName: role === 'teacher' ? name : null,
   });
 
+  if (role === 'student') {
+    const existingStudent = await rows('SELECT id FROM students WHERE institutionId = :institutionId AND (LOWER(email) = :email OR name = :name) LIMIT 1', {
+      institutionId,
+      email,
+      name,
+    });
+
+    let studentRecord = existingStudent[0];
+    if (!studentRecord) {
+      studentRecord = await insert('students', {
+        institutionId,
+        name,
+        grade: String(body.grade || 'Pending Assignment'),
+        age: Number(body.age || 0),
+        guardianName: String(body.guardianName || 'Pending Verification'),
+        phone: String(body.phone || 'Pending'),
+        email,
+        address: String(body.address || ''),
+        dateOfBirth: null,
+        admissionDate: new Date(),
+        emergencyContact: String(body.emergencyContact || ''),
+        medicalInfo: String(body.medicalInfo || ''),
+        status: 'Pending',
+        subjects: 0,
+      });
+    }
+
+    await insert('notifications', {
+      institutionId,
+      recipientRole: 'admin',
+      recipientName: null,
+      title: 'Student verification required',
+      message: name + ' (' + email + ') registered as a student. Please verify details and assign grade/courses manually.',
+      status: 'Unread',
+      relatedType: 'student_registration',
+      relatedId: studentRecord.id,
+    });
+  }
+
   if (role === 'parent') {
     await insert('notifications', {
       institutionId,
@@ -457,4 +496,5 @@ createServer(async (req, res) => {
 }).listen(port, () => {
   console.log(`Backend API running at http://localhost:${port}`);
 });
+
 

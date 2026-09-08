@@ -1,4 +1,4 @@
-const baseUrl = process.env.API_BASE || 'http://localhost:3001/api';
+﻿const baseUrl = process.env.API_BASE || 'http://localhost:3001/api';
 
 const request = async (path, expectedStatus = 200, options = {}) => {
   const response = await fetch(baseUrl + path, {
@@ -53,6 +53,23 @@ const run = async () => {
 
   await request('/reports?type=financial&role=student&institutionId=1&studentName=Ahmed%20Hassan%20Ali', 403);
   await request('/reports?type=enrollment&role=teacher&institutionId=1', 403);
+
+  const newStudentEmail = 'visible.student.' + Date.now() + '@sample.local';
+  const newStudentName = 'Visible Student ' + Date.now();
+  const registeredStudent = await request('/auth/register', 201, {
+    method: 'POST',
+    body: JSON.stringify({
+      institutionId: 1,
+      name: newStudentName,
+      email: newStudentEmail,
+      password: 'Student@123',
+      role: 'student',
+    }),
+  });
+  assert(registeredStudent.role === 'student', 'Student registration should succeed');
+
+  const studentsAfterRegistration = await request('/students');
+  assert(studentsAfterRegistration.some((student) => student.email === newStudentEmail && student.status === 'Pending'), 'Registered student should be visible in students list for admin verification');
 
   const parentEmail = 'parent.verify.' + Date.now() + '@sample.local';
   const registeredParent = await request('/auth/register', 201, {
@@ -119,3 +136,4 @@ run().catch((error) => {
   console.error(error.message);
   process.exit(1);
 });
+
