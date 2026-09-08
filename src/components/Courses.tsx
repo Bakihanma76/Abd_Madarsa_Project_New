@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { Search, Plus, Edit, Eye, Trash2, Filter, BookOpen, Clock, Users } from 'lucide-react';
 import CourseModal from './CourseModal';
 import { useApiResource } from '../hooks/useApiResource';
@@ -188,7 +188,7 @@ const Courses: React.FC<CoursesProps> = ({ user }) => {
       {filteredCourses.length === 0 && (
         <div className="text-center py-12">
           <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <div className="text-gray-500">No courses found matching your search criteria.</div>
+          <div className="text-gray-500">{user.role === 'student' || user.role === 'parent' ? 'No courses assigned yet. Admin or principal can assign courses later.' : 'No courses found matching your search criteria.'}</div>
         </div>
       )}
 
@@ -232,3 +232,4 @@ const Courses: React.FC<CoursesProps> = ({ user }) => {
 };
 
 export default Courses;
+

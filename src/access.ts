@@ -33,9 +33,7 @@ export const isVisibleForUser = (user: AppUser, record: any, resource: 'students
 
   if (resource === 'courses') {
     if (user.role === 'teacher') return record.teacher === user.name;
-    if (user.role === 'student' || user.role === 'parent') {
-      return record.grade.includes('Grade 5') || record.grade.includes('Grade 6');
-    }
+    if (user.role === 'student' || user.role === 'parent') return false;
   }
 
   if (resource === 'exams') {

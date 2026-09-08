@@ -97,12 +97,12 @@ const roleData = {
     title: 'Student Dashboard',
     subtitle: 'Personal view for courses, exams, attendance, and academic progress.',
     stats: [
-      { label: 'My Courses', value: '5', icon: BookOpen, color: 'bg-blue-500', note: '4 active' },
+      { label: 'Assigned Courses', value: '0', icon: BookOpen, color: 'bg-blue-500', note: 'Pending admin assignment' },
       { label: 'Attendance', value: '96%', icon: CheckCircle2, color: 'bg-emerald-500', note: 'Excellent' },
       { label: 'Next Exam', value: 'Jan 18', icon: Calendar, color: 'bg-orange-500', note: 'Hadith Studies' },
       { label: 'Average Score', value: '88%', icon: Award, color: 'bg-purple-500', note: 'Top 15%' },
     ],
-    actions: ['View my courses', 'Check exam schedule', 'Download report card', 'View attendance'],
+    actions: ['Wait for course assignment', 'Check exam schedule', 'Download report card', 'View attendance'],
     timeline: [
       { title: 'Quran recitation completed', detail: 'Lesson 12 signed off', time: 'Today' },
       { title: 'Arabic assignment due', detail: 'Submit before 8 PM', time: 'Today' },
