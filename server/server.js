@@ -383,6 +383,123 @@ const notifications = async (url) => {
   return rows(sql, params);
 };
 
+const feeMonth = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+const dateOnly = (date = new Date()) => date.toISOString().slice(0, 10);
+const monthlyFeeAmount = () => Number(process.env.MONTHLY_FEE_AMOUNT || 1200);
+
+const accrueMonthlyFees = async (institutionId, now = new Date()) => {
+  const month = feeMonth(now);
+  if (now.getDate() < 5) return { month, applied: false, created: 0, amount: monthlyFeeAmount() };
+
+  const students = await rows(
+    "SELECT id, name FROM students WHERE institutionId = :institutionId AND status IN ('Active', 'Pending')",
+    { institutionId },
+  );
+  let created = 0;
+  for (const student of students) {
+    const result = await rows(
+      `INSERT IGNORE INTO fee_charges (institutionId, studentId, studentName, chargeMonth, amount, chargeDate, notes)
+       VALUES (:institutionId, :studentId, :studentName, :chargeMonth, :amount, :chargeDate, :notes)`,
+      {
+        institutionId,
+        studentId: student.id,
+        studentName: student.name,
+        chargeMonth: month,
+        amount: monthlyFeeAmount(),
+        chargeDate: dateOnly(now),
+        notes: 'Auto monthly fee on/after 5th',
+      },
+    );
+    if (result.affectedRows > 0) created += 1;
+  }
+
+  return { month, applied: true, created, amount: monthlyFeeAmount() };
+};
+
+const feeTracker = async (url) => {
+  const institutionId = Number(url.searchParams.get('institutionId') || 1);
+  const accrual = await accrueMonthlyFees(institutionId);
+  const studentRows = await rows(
+    `SELECT
+      students.id AS studentId,
+      students.name AS studentName,
+      students.guardianName AS parentName,
+      students.grade,
+      students.status,
+      students.email,
+      COALESCE(charges.totalCharged, 0) AS totalCharged,
+      COALESCE(payments.totalPaid, 0) AS totalPaid,
+      COALESCE(charges.totalCharged, 0) - COALESCE(payments.totalPaid, 0) AS balance,
+      payments.lastPaymentDate,
+      payments.paidTillMonth
+    FROM students
+    LEFT JOIN (
+      SELECT institutionId, studentId, SUM(amount) AS totalCharged
+      FROM fee_charges
+      WHERE institutionId = :institutionId
+      GROUP BY institutionId, studentId
+    ) charges ON charges.institutionId = students.institutionId AND charges.studentId = students.id
+    LEFT JOIN (
+      SELECT institutionId, studentId, SUM(amount) AS totalPaid, MAX(paymentDate) AS lastPaymentDate, MAX(paidTillMonth) AS paidTillMonth
+      FROM fee_payments
+      WHERE institutionId = :institutionId
+      GROUP BY institutionId, studentId
+    ) payments ON payments.institutionId = students.institutionId AND payments.studentId = students.id
+    WHERE students.institutionId = :institutionId
+    ORDER BY balance DESC, students.id DESC`,
+    { institutionId },
+  );
+  const recentPayments = await rows(
+    `SELECT * FROM fee_payments WHERE institutionId = :institutionId ORDER BY paymentDate DESC, id DESC LIMIT 20`,
+    { institutionId },
+  );
+  const summary = studentRows.reduce((acc, row) => ({
+    totalCharged: acc.totalCharged + Number(row.totalCharged || 0),
+    totalPaid: acc.totalPaid + Number(row.totalPaid || 0),
+    totalBalance: acc.totalBalance + Number(row.balance || 0),
+  }), { totalCharged: 0, totalPaid: 0, totalBalance: 0 });
+
+  return { accrual, summary, students: studentRows, recentPayments };
+};
+
+const createFeePayment = async (body) => {
+  const institutionId = Number(body.institutionId || 1);
+  const studentId = Number(body.studentId || 0);
+  const amount = Number(body.amount || 0);
+  if (!studentId) throw new Error('Student is required');
+  if (!amount || amount <= 0) throw new Error('Payment amount must be greater than zero');
+
+  const [student] = await rows(
+    'SELECT id, name, guardianName FROM students WHERE institutionId = :institutionId AND id = :studentId LIMIT 1',
+    { institutionId, studentId },
+  );
+  if (!student) throw new Error('Student not found for selected institution');
+
+  const paymentDate = body.paymentDate || dateOnly();
+  const payment = await insert('fee_payments', {
+    institutionId,
+    studentId,
+    studentName: student.name,
+    parentName: student.guardianName,
+    amount,
+    fromDate: body.fromDate || null,
+    tillDate: body.tillDate || null,
+    paidTillMonth: body.paidTillMonth || null,
+    paymentDate,
+    notes: String(body.notes || '').trim() || null,
+  });
+
+  await insert('fee_transactions', {
+    institutionId,
+    studentName: student.name,
+    amount,
+    paidDate: paymentDate,
+    status: 'Paid',
+    category: 'Tuition',
+  });
+
+  return payment;
+};
 const dashboard = async () => {
   const stats = {
     students: await scalar('SELECT COUNT(*) AS value FROM students'),
@@ -457,6 +574,8 @@ createServer(async (req, res) => {
       return send(req, res, result.status, result.payload);
     }
     if (parts[1] === 'dashboard') return send(req, res, 200, await dashboard());
+    if (parts[1] === 'fee-tracker' && req.method === 'GET') return send(req, res, 200, await feeTracker(url));
+    if (parts[1] === 'fee-tracker' && parts[2] === 'payments' && req.method === 'POST') return send(req, res, 201, await createFeePayment(await readBody(req)));
     if (parts[1] === 'leave-requests' && req.method === 'GET') return send(req, res, 200, await leaveRequests(url));
     if (parts[1] === 'leave-requests' && req.method === 'POST') return send(req, res, 201, await createLeaveRequest(await readBody(req)));
     if (parts[1] === 'leave-requests' && parts[3] === 'decision' && req.method === 'PUT') return send(req, res, 200, await decideLeaveRequest(Number(parts[2]), await readBody(req)));
@@ -496,5 +615,6 @@ createServer(async (req, res) => {
 }).listen(port, () => {
   console.log(`Backend API running at http://localhost:${port}`);
 });
+
 
 

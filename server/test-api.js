@@ -101,6 +101,27 @@ const run = async () => {
   const adminNotifications = await request('/notifications?role=admin&institutionId=1');
   assert(adminNotifications.some((note) => note.title === 'Parent verification required' && note.message.includes(parentEmail)), 'Admin should receive parent verification notification');
 
+  const feeTracker = await request('/fee-tracker?institutionId=1');
+  assert(feeTracker.students.length > 0, 'Fee tracker should list students');
+  const feeStudent = feeTracker.students[0];
+  const beforeBalance = Number(feeStudent.balance || 0);
+  await request('/fee-tracker/payments', 201, {
+    method: 'POST',
+    body: JSON.stringify({
+      institutionId: 1,
+      studentId: feeStudent.studentId,
+      amount: 50,
+      fromDate: '2026-09-01',
+      tillDate: '2026-09-30',
+      paidTillMonth: '2026-09',
+      paymentDate: '2026-09-16',
+      notes: 'E2E fee payment',
+    }),
+  });
+  const feeTrackerAfterPayment = await request('/fee-tracker?institutionId=1');
+  const feeStudentAfterPayment = feeTrackerAfterPayment.students.find((student) => student.studentId === feeStudent.studentId);
+  assert(Number(feeStudentAfterPayment.balance) === beforeBalance - 50, 'Fee payment should reduce student balance');
+
   const leave = await request('/leave-requests', 201, {
     method: 'POST',
     body: JSON.stringify({
@@ -136,4 +157,5 @@ run().catch((error) => {
   console.error(error.message);
   process.exit(1);
 });
+
 

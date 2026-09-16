@@ -174,6 +174,34 @@ await connection.query(`
     relatedId INT,
     createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS fee_charges (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    institutionId INT NOT NULL DEFAULT 1,
+    studentId INT NOT NULL,
+    studentName VARCHAR(255) NOT NULL,
+    chargeMonth CHAR(7) NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    chargeDate DATE NOT NULL,
+    notes VARCHAR(255),
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_student_month (institutionId, studentId, chargeMonth)
+  );
+
+  CREATE TABLE IF NOT EXISTS fee_payments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    institutionId INT NOT NULL DEFAULT 1,
+    studentId INT NOT NULL,
+    studentName VARCHAR(255) NOT NULL,
+    parentName VARCHAR(255),
+    amount DECIMAL(12,2) NOT NULL,
+    fromDate DATE,
+    tillDate DATE,
+    paidTillMonth CHAR(7),
+    paymentDate DATE NOT NULL,
+    notes VARCHAR(255),
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 const addColumnIfMissing = async (table, column, definition) => {
@@ -191,7 +219,7 @@ const addColumnIfMissing = async (table, column, definition) => {
   }
 };
 
-for (const table of ['users', 'students', 'teachers', 'courses', 'exams', 'leave_requests', 'notifications']) {
+for (const table of ['users', 'students', 'teachers', 'courses', 'exams', 'leave_requests', 'notifications', 'fee_charges', 'fee_payments']) {
   await addColumnIfMissing(table, 'institutionId', 'INT NOT NULL DEFAULT 1 AFTER id');
   await connection.query(`UPDATE \`${table}\` SET institutionId = 1 WHERE institutionId IS NULL`);
 }
@@ -604,4 +632,5 @@ await seedInstitutionScenario(4, 'University', 400);
 
 await connection.end();
 console.log(`MySQL database '${dbName}' is ready with dynamic multi-institution sample data.`);
+
 
