@@ -39,6 +39,14 @@ type FeeTrackerProps = { user: AppUser };
 const money = (value: number | string | undefined) => `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
 const today = () => new Date().toISOString().slice(0, 10);
 const currentMonth = () => new Date().toISOString().slice(0, 7);
+const parentLabel = (name?: string | null) => {
+  const value = String(name || '').trim();
+  return !value || value.toLowerCase() === 'pending verification' ? 'Parent not linked' : value;
+};
+const gradeLabel = (grade?: string | null) => {
+  const value = String(grade || '').trim();
+  return !value || value.toLowerCase() === 'pending assignment' ? 'Grade not assigned' : value;
+};
 
 const FeeTracker: React.FC<FeeTrackerProps> = ({ user }) => {
   const [data, setData] = useState<FeeTrackerData | null>(null);
@@ -137,7 +145,7 @@ const FeeTracker: React.FC<FeeTrackerProps> = ({ user }) => {
               <div className="lg:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Parent / Student</label>
                 <select value={studentId} onChange={(event) => setStudentId(event.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent" required>
-                  {data.students.map((student) => <option key={student.studentId} value={student.studentId}>{student.parentName} - {student.studentName} - Balance {money(student.balance)}</option>)}
+                  {data.students.map((student) => <option key={student.studentId} value={student.studentId}>{parentLabel(student.parentName)} - {student.studentName} - Balance {money(student.balance)}</option>)}
                 </select>
               </div>
               <Field label="Amount" type="number" value={amount} onChange={setAmount} placeholder={selectedStudent ? 'Balance ' + money(selectedStudent.balance) : 'Enter amount'} required />
@@ -172,8 +180,8 @@ const FeeTracker: React.FC<FeeTrackerProps> = ({ user }) => {
                 <tbody className="divide-y divide-gray-200">
                   {filteredStudents.map((student) => (
                     <tr key={student.studentId} className="hover:bg-gray-50">
-                      <td className="px-5 py-4"><div className="font-medium text-gray-900">{student.studentName}</div><div className="text-xs text-gray-500">{student.grade} - {student.status}</div></td>
-                      <td className="px-5 py-4 text-sm text-gray-700">{student.parentName}</td>
+                      <td className="px-5 py-4"><div className="font-medium text-gray-900">{student.studentName}</div><div className="text-xs text-gray-500">{gradeLabel(student.grade)} - {student.status}</div></td>
+                      <td className="px-5 py-4 text-sm text-gray-700">{parentLabel(student.parentName)}</td>
                       <td className="px-5 py-4 text-sm text-gray-700">{student.paidTillMonth || 'Not paid'}</td>
                       <td className="px-5 py-4 text-sm text-emerald-700 font-medium">{money(student.totalPaid)}</td>
                       <td className="px-5 py-4 text-sm font-semibold text-amber-700">{money(student.balance)}</td>
@@ -203,7 +211,7 @@ const FeeTracker: React.FC<FeeTrackerProps> = ({ user }) => {
                   {data.recentPayments.map((payment) => (
                     <tr key={payment.id} className="hover:bg-gray-50">
                       <td className="px-5 py-4"><div className="font-medium text-gray-900">{payment.studentName}</div><div className="text-xs text-gray-500">{payment.paymentDate}</div></td>
-                      <td className="px-5 py-4 text-sm text-gray-700">{payment.parentName}</td>
+                      <td className="px-5 py-4 text-sm text-gray-700">{parentLabel(payment.parentName)}</td>
                       <td className="px-5 py-4 text-sm text-emerald-700 font-medium">{money(payment.amount)}</td>
                       <td className="px-5 py-4 text-sm text-gray-700">{payment.paidTillMonth || '-'}</td>
                       <td className="px-5 py-4"><StatusBadge status={payment.verificationStatus || 'Verified'} verifiedBy={payment.verifiedBy} /></td>
