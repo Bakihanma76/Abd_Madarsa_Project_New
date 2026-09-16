@@ -1,4 +1,4 @@
-﻿const baseUrl = process.env.API_BASE || 'http://localhost:3001/api';
+const baseUrl = process.env.API_BASE || 'http://localhost:3001/api';
 
 const request = async (path, expectedStatus = 200, options = {}) => {
   const response = await fetch(baseUrl + path, {
@@ -70,6 +70,22 @@ const run = async () => {
 
   const studentsAfterRegistration = await request('/students');
   assert(studentsAfterRegistration.some((student) => student.email === newStudentEmail && student.status === 'Pending'), 'Registered student should be visible in students list for admin verification');
+  await request('/auth/login', 500, {
+    method: 'POST',
+    body: JSON.stringify({ email: newStudentEmail, password: 'Student@123' }),
+  });
+  const verificationQueue = await request('/verifications?institutionId=1');
+  const pendingStudent = verificationQueue.pendingStudents.find((student) => student.email === newStudentEmail);
+  assert(Boolean(pendingStudent), 'Registered student should be in verification queue');
+  await request('/verifications/student/' + pendingStudent.id + '/decision', 200, {
+    method: 'PUT',
+    body: JSON.stringify({ decision: 'approve', decidedBy: 'E2E Admin' }),
+  });
+  const approvedStudentLogin = await request('/auth/login', 200, {
+    method: 'POST',
+    body: JSON.stringify({ email: newStudentEmail, password: 'Student@123' }),
+  });
+  assert(approvedStudentLogin.role === 'student', 'Approved student should be able to log in');
 
   const parentEmail = 'parent.verify.' + Date.now() + '@sample.local';
   const registeredParent = await request('/auth/register', 201, {

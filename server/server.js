@@ -180,7 +180,7 @@ const register = async (body) => {
     email,
     password: hashPassword(password),
     role,
-    status: 'Active',
+    status: role === 'teacher' ? 'Active' : 'Pending',
     linkedStudentName,
     linkedTeacherName: role === 'teacher' ? name : null,
   });
@@ -383,6 +383,87 @@ const notifications = async (url) => {
   return rows(sql, params);
 };
 
+const pendingVerifications = async (url) => {
+  const institutionId = Number(url.searchParams.get('institutionId') || 1);
+  const pendingStudents = await rows(
+    `SELECT students.*
+     FROM students
+     WHERE institutionId = :institutionId AND status = 'Pending'
+     ORDER BY id DESC`,
+    { institutionId },
+  );
+  const pendingParents = await rows(
+    `SELECT users.id, users.name, users.email, users.linkedStudentName, users.institutionId, users.status, notifications.id AS notificationId, notifications.message
+     FROM notifications
+     JOIN users ON users.id = notifications.relatedId
+     WHERE notifications.institutionId = :institutionId
+       AND notifications.relatedType = 'parent_registration'
+       AND notifications.status = 'Unread'
+       AND users.role = 'parent'
+     ORDER BY notifications.id DESC`,
+    { institutionId },
+  );
+  return { pendingStudents, pendingParents };
+};
+
+const decideVerification = async (type, id, body) => {
+  const decision = body.decision === 'approve' ? 'approve' : body.decision === 'reject' ? 'reject' : '';
+  if (!decision) throw new Error('Decision must be approve or reject');
+  const decidedBy = String(body.decidedBy || 'Admin').trim();
+
+  if (type === 'student') {
+    const student = await one('students', id);
+    if (!student) throw new Error('Student not found');
+    const status = decision === 'approve' ? 'Active' : 'Rejected';
+    const saved = await update('students', id, { ...student, status });
+    await rows(
+      `UPDATE users SET status = :userStatus WHERE role = 'student' AND institutionId = :institutionId AND (LOWER(email) = LOWER(:email) OR name = :name)`,
+      { userStatus: decision === 'approve' ? 'Active' : 'Inactive', institutionId: student.institutionId, email: student.email || '', name: student.name },
+    );
+    await insert('notifications', {
+      institutionId: student.institutionId,
+      recipientRole: 'student',
+      recipientName: student.name,
+      title: decision === 'approve' ? 'Student registration approved' : 'Student registration rejected',
+      message: decision === 'approve'
+        ? 'Your student registration has been verified by ' + decidedBy + '.'
+        : 'Your student registration was rejected by ' + decidedBy + '.',
+      status: 'Unread',
+      relatedType: 'student_verification',
+      relatedId: id,
+    });
+    return saved;
+  }
+
+  if (type === 'parent') {
+    const user = await one('users', id);
+    if (!user || user.role !== 'parent') throw new Error('Parent account not found');
+    await rows('UPDATE users SET status = :status WHERE id = :id', {
+      id,
+      status: decision === 'approve' ? 'Active' : 'Inactive',
+    });
+    await rows(
+      `UPDATE notifications SET status = 'Read' WHERE relatedType = 'parent_registration' AND relatedId = :id`,
+      { id },
+    );
+    await insert('notifications', {
+      institutionId: user.institutionId,
+      recipientRole: 'parent',
+      recipientName: user.name,
+      title: decision === 'approve' ? 'Parent account approved' : 'Parent account rejected',
+      message: decision === 'approve'
+        ? 'Your parent account for ' + user.linkedStudentName + ' has been verified by ' + decidedBy + '.'
+        : 'Your parent account verification was rejected by ' + decidedBy + '.',
+      status: 'Unread',
+      relatedType: 'parent_verification',
+      relatedId: id,
+    });
+    return { ...user, status: decision === 'approve' ? 'Active' : 'Inactive' };
+  }
+
+  throw new Error('Unknown verification type');
+};
+
 const feeMonth = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 const dateOnly = (date = new Date()) => date.toISOString().slice(0, 10);
 const monthlyFeeAmount = () => Number(process.env.MONTHLY_FEE_AMOUNT || 1200);
@@ -573,6 +654,8 @@ createServer(async (req, res) => {
       const result = await setupDatabase(url);
       return send(req, res, result.status, result.payload);
     }
+    if (parts[1] === 'verifications' && req.method === 'GET') return send(req, res, 200, await pendingVerifications(url));
+    if (parts[1] === 'verifications' && parts[4] === 'decision' && req.method === 'PUT') return send(req, res, 200, await decideVerification(parts[2], Number(parts[3]), await readBody(req)));
     if (parts[1] === 'dashboard') return send(req, res, 200, await dashboard());
     if (parts[1] === 'fee-tracker' && req.method === 'GET') return send(req, res, 200, await feeTracker(url));
     if (parts[1] === 'fee-tracker' && parts[2] === 'payments' && req.method === 'POST') return send(req, res, 201, await createFeePayment(await readBody(req)));
@@ -615,6 +698,7 @@ createServer(async (req, res) => {
 }).listen(port, () => {
   console.log(`Backend API running at http://localhost:${port}`);
 });
+
 
 
 

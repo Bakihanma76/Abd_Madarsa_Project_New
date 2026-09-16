@@ -1,5 +1,5 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
-import { BookOpen, Users, GraduationCap, FileText, BarChart3, Home, LogOut, ShieldCheck, Building2, CalendarCheck, WalletCards } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { BookOpen, Users, GraduationCap, FileText, BarChart3, Home, LogOut, ShieldCheck, Building2, CalendarCheck, WalletCards, UserCheck } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import Students from './components/Students';
 import Teachers from './components/Teachers';
@@ -8,6 +8,7 @@ import Exams from './components/Exams';
 import Reports from './components/Reports';
 import LeaveRequests from './components/LeaveRequests';
 import FeeTracker from './components/FeeTracker';
+import Verification from './components/Verification';
 import { apiRequest } from './api';
 import type { AppUser, Role } from './access';
 
@@ -108,8 +109,8 @@ const instructionPages: InstructionPage[] = [
 ];
 
 const permissions: Record<Role, string[]> = {
-  admin: ['dashboard', 'students', 'teachers', 'courses', 'exams', 'reports', 'leave', 'fees'],
-  principal: ['dashboard', 'students', 'teachers', 'courses', 'exams', 'reports', 'leave', 'fees'],
+  admin: ['dashboard', 'students', 'teachers', 'courses', 'exams', 'reports', 'leave', 'fees', 'verification'],
+  principal: ['dashboard', 'students', 'teachers', 'courses', 'exams', 'reports', 'leave', 'fees', 'verification'],
   teacher: ['dashboard', 'students', 'courses', 'exams', 'reports', 'leave'],
   student: ['dashboard', 'exams', 'reports', 'leave'],
   parent: ['dashboard', 'students', 'exams', 'reports', 'leave'],
@@ -150,6 +151,7 @@ function App() {
     { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'leave', label: 'Leave', icon: CalendarCheck },
     { id: 'fees', label: 'Fees', icon: WalletCards },
+    { id: 'verification', label: 'Verify', icon: UserCheck },
   ];
 
   const visibleTabs = currentUser ? tabs.filter((tab) => permissions[currentUser.role].includes(tab.id)) : [];
@@ -233,6 +235,12 @@ function App() {
           linkedStudentName: registerRole === 'parent' ? linkedStudentName : undefined,
         }),
       });
+      if (user.role === 'student' || user.role === 'parent') {
+        setAuthMode('signin');
+        setAuthError('Registration submitted. Admin or principal must verify it before login.');
+        setRegisterPassword('');
+        return;
+      }
       setCurrentUser(user);
       setActiveTab('dashboard');
     } catch (error) {
@@ -266,6 +274,8 @@ function App() {
         return <LeaveRequests user={currentUser} />;
       case 'fees':
         return <FeeTracker user={currentUser} />;
+      case 'verification':
+        return <Verification user={currentUser} />;
       default:
         return <Dashboard user={currentUser} />;
     }
