@@ -199,6 +199,9 @@ await connection.query(`
     tillDate DATE,
     paidTillMonth CHAR(7),
     paymentDate DATE NOT NULL,
+    verificationStatus ENUM('Pending', 'Verified', 'Rejected') NOT NULL DEFAULT 'Verified',
+    verifiedBy VARCHAR(255),
+    verifiedAt DATETIME,
     notes VARCHAR(255),
     createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
@@ -223,6 +226,11 @@ for (const table of ['users', 'students', 'teachers', 'courses', 'exams', 'leave
   await addColumnIfMissing(table, 'institutionId', 'INT NOT NULL DEFAULT 1 AFTER id');
   await connection.query(`UPDATE \`${table}\` SET institutionId = 1 WHERE institutionId IS NULL`);
 }
+await addColumnIfMissing('fee_payments', 'verificationStatus', "ENUM('Pending', 'Verified', 'Rejected') NOT NULL DEFAULT 'Verified' AFTER paymentDate");
+await addColumnIfMissing('fee_payments', 'verifiedBy', 'VARCHAR(255) AFTER verificationStatus');
+await addColumnIfMissing('fee_payments', 'verifiedAt', 'DATETIME AFTER verifiedBy');
+await connection.query("UPDATE fee_payments SET verificationStatus = 'Verified' WHERE verificationStatus IS NULL OR verificationStatus = ''");
+await connection.query("UPDATE fee_payments SET verifiedAt = COALESCE(verifiedAt, createdAt), verifiedBy = COALESCE(verifiedBy, 'System') WHERE verificationStatus = 'Verified'");
 await connection.query("ALTER TABLE institutions MODIFY type ENUM('university', 'school', 'madarsa') NOT NULL DEFAULT 'madarsa'");
 
 const backfillRegisteredStudents = async () => {

@@ -16,11 +16,22 @@ type FeeStudent = {
   lastPaymentDate?: string | null;
 };
 
+type FeePayment = {
+  id: number;
+  studentName: string;
+  parentName: string;
+  amount: number | string;
+  paymentDate: string;
+  paidTillMonth?: string | null;
+  verificationStatus?: 'Pending' | 'Verified' | 'Rejected';
+  verifiedBy?: string | null;
+};
+
 type FeeTrackerData = {
   accrual: { month: string; applied: boolean; created: number; amount: number };
   summary: { totalCharged: number; totalPaid: number; totalBalance: number };
   students: FeeStudent[];
-  recentPayments: Array<{ id: number; studentName: string; parentName: string; amount: number; paymentDate: string; paidTillMonth?: string }>;
+  recentPayments: FeePayment[];
 };
 
 type FeeTrackerProps = { user: AppUser };
@@ -172,6 +183,39 @@ const FeeTracker: React.FC<FeeTrackerProps> = ({ user }) => {
               </table>
             </div>
           </div>
+
+          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900">Recent Payment Verification</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parent</th>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paid Till</th>
+                    <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {data.recentPayments.map((payment) => (
+                    <tr key={payment.id} className="hover:bg-gray-50">
+                      <td className="px-5 py-4"><div className="font-medium text-gray-900">{payment.studentName}</div><div className="text-xs text-gray-500">{payment.paymentDate}</div></td>
+                      <td className="px-5 py-4 text-sm text-gray-700">{payment.parentName}</td>
+                      <td className="px-5 py-4 text-sm text-emerald-700 font-medium">{money(payment.amount)}</td>
+                      <td className="px-5 py-4 text-sm text-gray-700">{payment.paidTillMonth || '-'}</td>
+                      <td className="px-5 py-4"><StatusBadge status={payment.verificationStatus || 'Verified'} verifiedBy={payment.verifiedBy} /></td>
+                    </tr>
+                  ))}
+                  {data.recentPayments.length === 0 && (
+                    <tr><td colSpan={5} className="px-5 py-6 text-sm text-gray-500 text-center">No payments entered yet.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </>
       )}
     </div>
@@ -185,6 +229,22 @@ const Summary: React.FC<SummaryProps> = ({ label, value, icon: Icon, color, note
     <div className={color + ' p-3 rounded-lg'}><Icon className="w-5 h-5 text-white" /></div>
   </div>
 );
+
+type StatusBadgeProps = { status: 'Pending' | 'Verified' | 'Rejected'; verifiedBy?: string | null };
+const StatusBadge: React.FC<StatusBadgeProps> = ({ status, verifiedBy }) => {
+  const styles = {
+    Pending: 'bg-amber-50 text-amber-700 border-amber-200',
+    Verified: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    Rejected: 'bg-red-50 text-red-700 border-red-200',
+  };
+
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <span className={'inline-flex px-2 py-1 rounded-full border text-xs font-semibold ' + styles[status]}>{status}</span>
+      {status === 'Verified' && verifiedBy && <span className="text-xs text-gray-500">by {verifiedBy}</span>}
+    </div>
+  );
+};
 
 type FieldProps = { label: string; value: string; onChange: (value: string) => void; type?: string; placeholder?: string; required?: boolean };
 const Field: React.FC<FieldProps> = ({ label, value, onChange, type = 'text', placeholder, required }) => (

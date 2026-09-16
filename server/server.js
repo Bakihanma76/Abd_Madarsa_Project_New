@@ -523,7 +523,7 @@ const feeTracker = async (url) => {
     LEFT JOIN (
       SELECT institutionId, studentId, SUM(amount) AS totalPaid, MAX(paymentDate) AS lastPaymentDate, MAX(paidTillMonth) AS paidTillMonth
       FROM fee_payments
-      WHERE institutionId = :institutionId
+      WHERE institutionId = :institutionId AND verificationStatus = 'Verified'
       GROUP BY institutionId, studentId
     ) payments ON payments.institutionId = students.institutionId AND payments.studentId = students.id
     WHERE students.institutionId = :institutionId
@@ -567,6 +567,9 @@ const createFeePayment = async (body) => {
     tillDate: body.tillDate || null,
     paidTillMonth: body.paidTillMonth || null,
     paymentDate,
+    verificationStatus: 'Verified',
+    verifiedBy: String(body.verifiedBy || body.enteredBy || 'Principal').trim(),
+    verifiedAt: new Date(),
     notes: String(body.notes || '').trim() || null,
   });
 
