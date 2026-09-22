@@ -26,7 +26,12 @@ export const isVisibleForUser = (user: AppUser, record: any, resource: 'students
   if (user.role === 'admin' || user.role === 'principal') return true;
 
   if (resource === 'students') {
-    if (user.role === 'teacher') return ['Grade 3', 'Grade 4'].includes(record.grade);
+    if (user.role === 'teacher') {
+      const teacherName = user.linkedTeacherName || user.name;
+      const classTeachers = String(record.classTeacherNames || '').split(',').map((name) => name.trim());
+      const legacyTeachers = String(record.legacyTeacherNames || '').split(',').map((name) => name.trim());
+      return record.assignedTeacherName === teacherName || classTeachers.includes(teacherName) || legacyTeachers.includes(teacherName);
+    }
     if (user.role === 'student') return record.name === (user.linkedStudentName || user.name);
     if (user.role === 'parent') return record.name === user.linkedStudentName || record.guardianName === user.name;
   }

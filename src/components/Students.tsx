@@ -15,7 +15,12 @@ const Students: React.FC<StudentsProps> = ({ user }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterGrade, setFilterGrade] = useState('');
   const [academic, setAcademic] = useState<any>({ academicYears: [], grades: [], sections: [] });
-  const { items: students, loading, error, save, remove } = useApiResource<any>('students');
+  const studentResource = user.role === 'teacher'
+    ? 'students?institutionId=' + String(user.institutionId || 1) + '&role=teacher&teacherName=' + encodeURIComponent(user.linkedTeacherName || user.name)
+    : user.role === 'student' || user.role === 'parent'
+    ? 'students?institutionId=' + String(user.institutionId || 1) + '&role=' + user.role + '&studentName=' + encodeURIComponent(user.linkedStudentName || user.name)
+    : 'students';
+  const { items: students, loading, error, save, remove } = useApiResource<any>(studentResource);
   const { items: teachers } = useApiResource<any>('teachers');
   const canWrite = canManage(user.role, 'students');
   const canRemove = canDelete(user.role);
@@ -157,8 +162,8 @@ const Students: React.FC<StudentsProps> = ({ user }) => {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{student.assignedTeacherName || 'Not assigned'}</div>
-                    <div className="text-sm text-gray-500">{student.assignedCourseName || 'Course pending'}</div>
+                    <div className="text-sm text-gray-900">{student.assignedTeacherName || student.classTeacherNames || student.legacyTeacherNames || 'Not assigned'}</div>
+                    <div className="text-sm text-gray-500">{student.assignedCourseName || student.classCourseNames || student.legacyCourseNames || 'Course pending'}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex items-center space-x-2">

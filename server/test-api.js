@@ -33,6 +33,19 @@ const run = async () => {
   assert(courses.length >= 30, 'Expected at least 30 courses, got ' + courses.length);
   assert(exams.length >= 30, 'Expected at least 30 exams, got ' + exams.length);
 
+  const scopedCourseOne = courses.find((course) => course.institutionId === 1 && course.status === 'Active');
+  const scopedCourseTwo = courses.find((course) => course.institutionId === 1 && course.status === 'Active' && course.teacher !== scopedCourseOne?.teacher && course.grade !== scopedCourseOne?.grade);
+  if (scopedCourseOne && scopedCourseTwo) {
+    const teacherOneStudents = await request('/students?institutionId=1&role=teacher&teacherName=' + encodeURIComponent(scopedCourseOne.teacher));
+    const teacherTwoStudents = await request('/students?institutionId=1&role=teacher&teacherName=' + encodeURIComponent(scopedCourseTwo.teacher));
+    assert(teacherOneStudents.length > 0, 'First teacher scope should return students');
+    assert(teacherTwoStudents.length > 0, 'Second teacher scope should return students');
+    assert(
+      teacherOneStudents.slice(0, 5).map((student) => student.id).join(',') !== teacherTwoStudents.slice(0, 5).map((student) => student.id).join(','),
+      'Different teachers should not see the same scoped student list',
+    );
+  }
+
   const adminFinancial = await request('/reports?type=financial&role=admin&institutionId=1');
   assert(adminFinancial.summary.totalRevenue > 0, 'Admin financial report should have revenue');
   assert(adminFinancial.breakdown.length > 0, 'Admin financial report should have expense breakdown');

@@ -464,37 +464,119 @@ const decideVerification = async (type, id, body) => {
   throw new Error('Unknown verification type');
 };
 
-const studentList = async () => rows(`
-  SELECT
-    students.*,
-    assignments.teacherId AS assignedTeacherId,
-    assignments.teacherName AS assignedTeacherName,
-    assignments.courseId AS assignedCourseId,
-    assignments.courseName AS assignedCourseName,
-    enrollments.academicYearId,
-    academic_years.name AS academicYearName,
-    enrollments.gradeId,
-    academic_grades.name AS academicGradeName,
-    enrollments.sectionId,
-    academic_sections.name AS sectionName,
-    enrollments.rollNumber
-  FROM students
-  LEFT JOIN student_enrollments enrollments ON enrollments.institutionId = students.institutionId AND enrollments.studentId = students.id AND enrollments.status = 'Active'
-  LEFT JOIN academic_years ON academic_years.id = enrollments.academicYearId
-  LEFT JOIN academic_grades ON academic_grades.id = enrollments.gradeId
-  LEFT JOIN academic_sections ON academic_sections.id = enrollments.sectionId
-  LEFT JOIN (
-    SELECT a.*
-    FROM student_teacher_assignments a
-    JOIN (
-      SELECT institutionId, studentId, MAX(id) AS id
-      FROM student_teacher_assignments
-      WHERE status = 'Active'
-      GROUP BY institutionId, studentId
-    ) latest ON latest.id = a.id
-  ) assignments ON assignments.institutionId = students.institutionId AND assignments.studentId = students.id
-  ORDER BY students.id DESC
-`);
+const studentList = async (url) => {
+  const institutionId = Number(url.searchParams.get('institutionId') || 0);
+  const role = url.searchParams.get('role') || '';
+  const teacherName = url.searchParams.get('teacherName') || '';
+  const linkedStudentName = url.searchParams.get('studentName') || '';
+  const conditions = [];
+  const params = {};
+
+  if (institutionId) {
+    conditions.push('students.institutionId = :institutionId');
+    params.institutionId = institutionId;
+  }
+
+  if (role === 'teacher' && teacherName) {
+    conditions.push(`(
+      assignments.teacherName = :teacherName
+      OR EXISTS (
+        SELECT 1
+        FROM student_enrollments scopedEnrollments
+        JOIN class_course_assignments scopedAssignments
+          ON scopedAssignments.institutionId = scopedEnrollments.institutionId
+         AND scopedAssignments.academicYearId = scopedEnrollments.academicYearId
+         AND scopedAssignments.gradeId = scopedEnrollments.gradeId
+         AND scopedAssignments.sectionId = scopedEnrollments.sectionId
+         AND scopedAssignments.status = 'Active'
+        JOIN teachers scopedTeachers ON scopedTeachers.id = scopedAssignments.teacherId
+        WHERE scopedEnrollments.institutionId = students.institutionId
+          AND scopedEnrollments.studentId = students.id
+          AND scopedEnrollments.status = 'Active'
+          AND scopedTeachers.name = :teacherName
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM courses legacyCourses
+        WHERE legacyCourses.institutionId = students.institutionId
+          AND legacyCourses.status = 'Active'
+          AND legacyCourses.teacher = :teacherName
+          AND legacyCourses.grade LIKE CONCAT('%', students.grade, '%')
+      )
+    )`);
+    params.teacherName = teacherName;
+  }
+
+  if ((role === 'student' || role === 'parent') && linkedStudentName) {
+    conditions.push('(students.name = :linkedStudentName OR students.guardianName = :linkedStudentName)');
+    params.linkedStudentName = linkedStudentName;
+  }
+
+  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+  return rows(`
+    SELECT
+      students.*,
+      assignments.teacherId AS assignedTeacherId,
+      assignments.teacherName AS assignedTeacherName,
+      assignments.courseId AS assignedCourseId,
+      assignments.courseName AS assignedCourseName,
+      enrollments.academicYearId,
+      academic_years.name AS academicYearName,
+      enrollments.gradeId,
+      academic_grades.name AS academicGradeName,
+      enrollments.sectionId,
+      academic_sections.name AS sectionName,
+      enrollments.rollNumber,
+      classScope.classTeacherNames,
+      classScope.classCourseNames,
+      legacyScope.legacyTeacherNames,
+      legacyScope.legacyCourseNames
+    FROM students
+    LEFT JOIN student_enrollments enrollments ON enrollments.institutionId = students.institutionId AND enrollments.studentId = students.id AND enrollments.status = 'Active'
+    LEFT JOIN academic_years ON academic_years.id = enrollments.academicYearId
+    LEFT JOIN academic_grades ON academic_grades.id = enrollments.gradeId
+    LEFT JOIN academic_sections ON academic_sections.id = enrollments.sectionId
+    LEFT JOIN (
+      SELECT a.*
+      FROM student_teacher_assignments a
+      JOIN (
+        SELECT institutionId, studentId, MAX(id) AS id
+        FROM student_teacher_assignments
+        WHERE status = 'Active'
+        GROUP BY institutionId, studentId
+      ) latest ON latest.id = a.id
+    ) assignments ON assignments.institutionId = students.institutionId AND assignments.studentId = students.id
+    LEFT JOIN (
+      SELECT enrollments.institutionId, enrollments.studentId,
+             GROUP_CONCAT(DISTINCT teachers.name ORDER BY teachers.name SEPARATOR ', ') AS classTeacherNames,
+             GROUP_CONCAT(DISTINCT courses.name ORDER BY courses.name SEPARATOR ', ') AS classCourseNames
+      FROM student_enrollments enrollments
+      JOIN class_course_assignments classAssignments
+        ON classAssignments.institutionId = enrollments.institutionId
+       AND classAssignments.academicYearId = enrollments.academicYearId
+       AND classAssignments.gradeId = enrollments.gradeId
+       AND classAssignments.sectionId = enrollments.sectionId
+       AND classAssignments.status = 'Active'
+      JOIN teachers ON teachers.id = classAssignments.teacherId
+      JOIN courses ON courses.id = classAssignments.courseId
+      WHERE enrollments.status = 'Active'
+      GROUP BY enrollments.institutionId, enrollments.studentId
+    ) classScope ON classScope.institutionId = students.institutionId AND classScope.studentId = students.id
+    LEFT JOIN (
+      SELECT legacyStudents.institutionId, legacyStudents.id AS studentId,
+             GROUP_CONCAT(DISTINCT legacyCourses.teacher ORDER BY legacyCourses.teacher SEPARATOR ', ') AS legacyTeacherNames,
+             GROUP_CONCAT(DISTINCT legacyCourses.name ORDER BY legacyCourses.name SEPARATOR ', ') AS legacyCourseNames
+      FROM students legacyStudents
+      JOIN courses legacyCourses
+        ON legacyCourses.institutionId = legacyStudents.institutionId
+       AND legacyCourses.status = 'Active'
+       AND legacyCourses.grade LIKE CONCAT('%', legacyStudents.grade, '%')
+      GROUP BY legacyStudents.institutionId, legacyStudents.id
+    ) legacyScope ON legacyScope.institutionId = students.institutionId AND legacyScope.studentId = students.id
+    ${where}
+    ORDER BY students.id DESC
+  `, params);
+};
 
 const saveStudent = async (id, body) => {
   const studentData = normalize(resources.students, body);
@@ -1126,7 +1208,7 @@ createServer(async (req, res) => {
     if (!resource) return send(req, res, 404, { error: 'Unknown resource' });
 
     const id = parts[2] ? Number(parts[2]) : null;
-    if (parts[1] === 'students' && req.method === 'GET' && !id) return send(req, res, 200, await studentList());
+    if (parts[1] === 'students' && req.method === 'GET' && !id) return send(req, res, 200, await studentList(url));
     if (parts[1] === 'students' && req.method === 'POST') return send(req, res, 201, await saveStudent(null, await readBody(req)));
     if (parts[1] === 'students' && req.method === 'PUT' && id) return send(req, res, 200, await saveStudent(id, await readBody(req)));
     if (req.method === 'GET' && !id) return send(req, res, 200, await all(resource.table));
