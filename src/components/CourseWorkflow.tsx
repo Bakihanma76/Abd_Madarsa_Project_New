@@ -32,6 +32,7 @@ const canApprove = (user: AppUser) => user.role === 'principal' || user.role ===
 
 const CourseWorkflow: React.FC<CourseWorkflowProps> = ({ user, onError }) => {
   const [flow, setFlow] = useState<FlowData | null>(null);
+  const [saving, setSaving] = useState(false);
   const [requestForm, setRequestForm] = useState({ studentId: '', courseId: '', reason: '' });
   const [assignForm, setAssignForm] = useState({ studentId: '', teacherId: '', courseId: '', notes: '' });
   const isApprover = canApprove(user);
@@ -98,17 +99,23 @@ const CourseWorkflow: React.FC<CourseWorkflowProps> = ({ user, onError }) => {
   };
 
   const submit = async (path: string, body: unknown) => {
+    if (saving) return;
     onError('');
+    setSaving(true);
     try {
       await apiRequest(path, { method: 'POST', body: JSON.stringify(body) });
       await load();
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Unable to save workflow change');
+    } finally {
+      setSaving(false);
     }
   };
 
   const decide = async (request: CourseRequest, decision: 'approve' | 'reject') => {
+    if (saving) return;
     onError('');
+    setSaving(true);
     try {
       await apiRequest('/student-course-flow/requests/' + request.id + '/decision', {
         method: 'PUT',
@@ -117,6 +124,8 @@ const CourseWorkflow: React.FC<CourseWorkflowProps> = ({ user, onError }) => {
       await load();
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Unable to update request');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -127,7 +136,7 @@ const CourseWorkflow: React.FC<CourseWorkflowProps> = ({ user, onError }) => {
           <Select label="Student" value={requestForm.studentId} onChange={(studentId) => setRequestForm({ ...requestForm, studentId })} options={flow.students.map((student) => ({ value: student.id, label: student.name + ' - ' + student.grade }))} required />
           <Select label="Course needed" value={requestForm.courseId} onChange={(courseId) => setRequestForm({ ...requestForm, courseId })} options={flow.courses.map((course) => ({ value: course.id, label: course.name }))} required />
           <Text label="Reason" value={requestForm.reason} onChange={(reason) => setRequestForm({ ...requestForm, reason })} placeholder="Why this student needs this course" />
-          <button type="submit" disabled={!flow.students.length || !flow.courses.length} className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">Send to Principal</button>
+          <button type="submit" disabled={saving || !flow.students.length || !flow.courses.length} className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">{saving ? 'Saving...' : 'Send to Principal'}</button>
           {(!flow.students.length || !flow.courses.length) && <p className="text-sm text-amber-700 md:col-span-2">Principal must assign students and active courses to this teacher before course requests can be sent.</p>}
         </WorkflowForm>
       )}
@@ -138,7 +147,7 @@ const CourseWorkflow: React.FC<CourseWorkflowProps> = ({ user, onError }) => {
           <Select label="Teacher" value={assignForm.teacherId} onChange={(teacherId) => setAssignForm({ ...assignForm, teacherId })} options={flow.teachers.map((teacher) => ({ value: teacher.id, label: teacher.name + ' - ' + teacher.subject }))} required />
           <Select label="Course" value={assignForm.courseId} onChange={(courseId) => setAssignForm({ ...assignForm, courseId })} options={[{ value: '', label: 'No course' }, ...flow.courses.map((course) => ({ value: course.id, label: course.name }))]} />
           <Text label="Notes" value={assignForm.notes} onChange={(notes) => setAssignForm({ ...assignForm, notes })} placeholder="Assignment note" />
-          <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">Assign Teacher</button>
+          <button type="submit" disabled={saving} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">{saving ? 'Saving...' : 'Assign Teacher'}</button>
         </WorkflowForm>
       )}
 

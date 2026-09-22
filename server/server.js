@@ -567,10 +567,15 @@ const courseFlow = async (url) => {
       { institutionId },
     ),
     rows(
-      `SELECT *
-       FROM student_teacher_assignments
-       WHERE institutionId = :institutionId AND status = 'Active'
-       ORDER BY createdAt DESC, id DESC
+      `SELECT assignments.*
+       FROM student_teacher_assignments assignments
+       JOIN (
+         SELECT institutionId, studentId, teacherId, COALESCE(courseId, 0) AS courseKey, MAX(id) AS id
+         FROM student_teacher_assignments
+         WHERE institutionId = :institutionId AND status = 'Active'
+         GROUP BY institutionId, studentId, teacherId, COALESCE(courseId, 0)
+       ) latest ON latest.id = assignments.id
+       ORDER BY assignments.createdAt DESC, assignments.id DESC
        LIMIT 100`,
       { institutionId },
     ),
@@ -673,6 +678,20 @@ const createStudentTeacherAssignment = async (body) => {
     if (!course) throw new Error('Active course not found');
   }
 
+  const [existing] = await rows(
+    `SELECT *
+     FROM student_teacher_assignments
+     WHERE institutionId = :institutionId
+       AND studentId = :studentId
+       AND teacherId = :teacherId
+       AND COALESCE(courseId, 0) = :courseKey
+       AND status = 'Active'
+     ORDER BY id DESC
+     LIMIT 1`,
+    { institutionId, studentId, teacherId, courseKey: course?.id || 0 },
+  );
+  if (existing) return existing;
+
   return insert('student_teacher_assignments', {
     institutionId,
     studentId,
@@ -693,6 +712,7 @@ const decideCourseRequest = async (id, body) => {
 
   const existing = await one('student_course_requests', id);
   if (!existing) throw new Error('Course request not found');
+  if (existing.status !== 'Pending') return existing;
 
   const saved = await update('student_course_requests', id, {
     ...existing,

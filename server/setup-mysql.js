@@ -262,6 +262,22 @@ await addColumnIfMissing('fee_payments', 'verifiedBy', 'VARCHAR(255) AFTER verif
 await addColumnIfMissing('fee_payments', 'verifiedAt', 'DATETIME AFTER verifiedBy');
 await connection.query("UPDATE fee_payments SET verificationStatus = 'Verified' WHERE verificationStatus IS NULL OR verificationStatus = ''");
 await connection.query("UPDATE fee_payments SET verifiedAt = COALESCE(verifiedAt, createdAt), verifiedBy = COALESCE(verifiedBy, 'System') WHERE verificationStatus = 'Verified'");
+await connection.query(`
+  UPDATE student_teacher_assignments assignments
+  JOIN (
+    SELECT institutionId, studentId, teacherId, COALESCE(courseId, 0) AS courseKey, MAX(id) AS keepId
+    FROM student_teacher_assignments
+    WHERE status = 'Active'
+    GROUP BY institutionId, studentId, teacherId, COALESCE(courseId, 0)
+    HAVING COUNT(*) > 1
+  ) duplicates
+    ON duplicates.institutionId = assignments.institutionId
+   AND duplicates.studentId = assignments.studentId
+   AND duplicates.teacherId = assignments.teacherId
+   AND duplicates.courseKey = COALESCE(assignments.courseId, 0)
+  SET assignments.status = 'Inactive'
+  WHERE assignments.status = 'Active' AND assignments.id <> duplicates.keepId
+`);
 await connection.query("ALTER TABLE institutions MODIFY type ENUM('university', 'school', 'madarsa') NOT NULL DEFAULT 'madarsa'");
 
 const backfillRegisteredStudents = async () => {
