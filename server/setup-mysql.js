@@ -205,6 +205,37 @@ await connection.query(`
     notes VARCHAR(255),
     createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS student_course_requests (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    institutionId INT NOT NULL DEFAULT 1,
+    studentId INT NOT NULL,
+    studentName VARCHAR(255) NOT NULL,
+    courseId INT NOT NULL,
+    courseName VARCHAR(255) NOT NULL,
+    teacherId INT,
+    teacherName VARCHAR(255) NOT NULL,
+    reason TEXT,
+    status ENUM('Pending', 'Approved', 'Rejected') NOT NULL DEFAULT 'Pending',
+    decidedBy VARCHAR(255),
+    decidedAt DATETIME,
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS student_teacher_assignments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    institutionId INT NOT NULL DEFAULT 1,
+    studentId INT NOT NULL,
+    studentName VARCHAR(255) NOT NULL,
+    teacherId INT NOT NULL,
+    teacherName VARCHAR(255) NOT NULL,
+    courseId INT,
+    courseName VARCHAR(255),
+    assignedBy VARCHAR(255) NOT NULL,
+    notes TEXT,
+    status ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 const addColumnIfMissing = async (table, column, definition) => {
@@ -222,7 +253,7 @@ const addColumnIfMissing = async (table, column, definition) => {
   }
 };
 
-for (const table of ['users', 'students', 'teachers', 'courses', 'exams', 'leave_requests', 'notifications', 'fee_charges', 'fee_payments']) {
+for (const table of ['users', 'students', 'teachers', 'courses', 'exams', 'leave_requests', 'notifications', 'fee_charges', 'fee_payments', 'student_course_requests', 'student_teacher_assignments']) {
   await addColumnIfMissing(table, 'institutionId', 'INT NOT NULL DEFAULT 1 AFTER id');
   await connection.query(`UPDATE \`${table}\` SET institutionId = 1 WHERE institutionId IS NULL`);
 }

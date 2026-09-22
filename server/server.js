@@ -464,6 +464,197 @@ const decideVerification = async (type, id, body) => {
   throw new Error('Unknown verification type');
 };
 
+const courseFlow = async (url) => {
+  const institutionId = Number(url.searchParams.get('institutionId') || 1);
+  const [studentRows, teacherRows, courseRows, requestRows, assignmentRows] = await Promise.all([
+    rows(
+      `SELECT id, name, grade, guardianName, status
+       FROM students
+       WHERE institutionId = :institutionId AND status = 'Active'
+       ORDER BY name`,
+      { institutionId },
+    ),
+    rows(
+      `SELECT id, name, subject, status
+       FROM teachers
+       WHERE institutionId = :institutionId AND status = 'Active'
+       ORDER BY name`,
+      { institutionId },
+    ),
+    rows(
+      `SELECT id, name, grade, teacher, status
+       FROM courses
+       WHERE institutionId = :institutionId AND status = 'Active'
+       ORDER BY name`,
+      { institutionId },
+    ),
+    rows(
+      `SELECT *
+       FROM student_course_requests
+       WHERE institutionId = :institutionId
+       ORDER BY createdAt DESC, id DESC
+       LIMIT 100`,
+      { institutionId },
+    ),
+    rows(
+      `SELECT *
+       FROM student_teacher_assignments
+       WHERE institutionId = :institutionId AND status = 'Active'
+       ORDER BY createdAt DESC, id DESC
+       LIMIT 100`,
+      { institutionId },
+    ),
+  ]);
+
+  return { students: studentRows, teachers: teacherRows, courses: courseRows, requests: requestRows, assignments: assignmentRows };
+};
+
+const createCourseRequest = async (body) => {
+  const institutionId = Number(body.institutionId || 1);
+  const studentId = Number(body.studentId || 0);
+  const courseId = Number(body.courseId || 0);
+  const teacherName = String(body.teacherName || '').trim();
+  if (!studentId) throw new Error('Student is required');
+  if (!courseId) throw new Error('Course is required');
+  if (!teacherName) throw new Error('Teacher name is required');
+
+  const [student] = await rows(
+    'SELECT id, name FROM students WHERE institutionId = :institutionId AND id = :studentId AND status = :status LIMIT 1',
+    { institutionId, studentId, status: 'Active' },
+  );
+  if (!student) throw new Error('Active student not found');
+
+  const [course] = await rows(
+    'SELECT id, name FROM courses WHERE institutionId = :institutionId AND id = :courseId AND status = :status LIMIT 1',
+    { institutionId, courseId, status: 'Active' },
+  );
+  if (!course) throw new Error('Active course not found');
+
+  const [teacher] = await rows(
+    'SELECT id, name FROM teachers WHERE institutionId = :institutionId AND name = :teacherName AND status = :status LIMIT 1',
+    { institutionId, teacherName, status: 'Active' },
+  );
+
+  const request = await insert('student_course_requests', {
+    institutionId,
+    studentId,
+    studentName: student.name,
+    courseId,
+    courseName: course.name,
+    teacherId: teacher?.id || null,
+    teacherName,
+    reason: String(body.reason || '').trim() || null,
+    status: 'Pending',
+    decidedBy: null,
+    decidedAt: null,
+  });
+
+  await insert('notifications', {
+    institutionId,
+    recipientRole: 'principal',
+    recipientName: null,
+    title: 'Course need approval required',
+    message: teacherName + ' requested ' + course.name + ' for ' + student.name + '.',
+    status: 'Unread',
+    relatedType: 'student_course_request',
+    relatedId: request.id,
+  });
+
+  return request;
+};
+
+const createStudentTeacherAssignment = async (body) => {
+  const institutionId = Number(body.institutionId || 1);
+  const studentId = Number(body.studentId || 0);
+  const teacherId = Number(body.teacherId || 0);
+  const courseId = body.courseId ? Number(body.courseId) : null;
+  if (!studentId) throw new Error('Student is required');
+  if (!teacherId) throw new Error('Teacher is required');
+
+  const [student] = await rows(
+    'SELECT id, name FROM students WHERE institutionId = :institutionId AND id = :studentId AND status = :status LIMIT 1',
+    { institutionId, studentId, status: 'Active' },
+  );
+  if (!student) throw new Error('Active student not found');
+
+  const [teacher] = await rows(
+    'SELECT id, name FROM teachers WHERE institutionId = :institutionId AND id = :teacherId AND status = :status LIMIT 1',
+    { institutionId, teacherId, status: 'Active' },
+  );
+  if (!teacher) throw new Error('Active teacher not found');
+
+  let course = null;
+  if (courseId) {
+    [course] = await rows(
+      'SELECT id, name FROM courses WHERE institutionId = :institutionId AND id = :courseId AND status = :status LIMIT 1',
+      { institutionId, courseId, status: 'Active' },
+    );
+    if (!course) throw new Error('Active course not found');
+  }
+
+  return insert('student_teacher_assignments', {
+    institutionId,
+    studentId,
+    studentName: student.name,
+    teacherId,
+    teacherName: teacher.name,
+    courseId: course?.id || null,
+    courseName: course?.name || null,
+    assignedBy: String(body.assignedBy || 'Principal').trim(),
+    notes: String(body.notes || '').trim() || null,
+    status: 'Active',
+  });
+};
+
+const decideCourseRequest = async (id, body) => {
+  const decision = body.decision === 'approve' ? 'Approved' : body.decision === 'reject' ? 'Rejected' : '';
+  if (!decision) throw new Error('Decision must be approve or reject');
+
+  const existing = await one('student_course_requests', id);
+  if (!existing) throw new Error('Course request not found');
+
+  const saved = await update('student_course_requests', id, {
+    ...existing,
+    status: decision,
+    decidedBy: String(body.decidedBy || 'Principal').trim(),
+    decidedAt: new Date(),
+  });
+
+  if (decision === 'Approved') {
+    let teacherId = existing.teacherId;
+    if (!teacherId) {
+      const [teacher] = await rows(
+        'SELECT id FROM teachers WHERE institutionId = :institutionId AND name = :teacherName AND status = :status LIMIT 1',
+        { institutionId: existing.institutionId, teacherName: existing.teacherName, status: 'Active' },
+      );
+      teacherId = teacher?.id || 0;
+    }
+    if (teacherId) {
+      await createStudentTeacherAssignment({
+        institutionId: existing.institutionId,
+        studentId: existing.studentId,
+        teacherId,
+        courseId: existing.courseId,
+        assignedBy: body.decidedBy || 'Principal',
+        notes: 'Approved from teacher course need request #' + id,
+      });
+    }
+  }
+
+  await insert('notifications', {
+    institutionId: existing.institutionId,
+    recipientRole: 'teacher',
+    recipientName: existing.teacherName,
+    title: 'Course request ' + decision.toLowerCase(),
+    message: 'Your request for ' + existing.studentName + ' to take ' + existing.courseName + ' was ' + decision.toLowerCase() + '.',
+    status: 'Unread',
+    relatedType: 'student_course_request',
+    relatedId: id,
+  });
+
+  return saved;
+};
+
 const feeMonth = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 const dateOnly = (date = new Date()) => date.toISOString().slice(0, 10);
 const monthlyFeeAmount = () => Number(process.env.MONTHLY_FEE_AMOUNT || 1200);
@@ -659,6 +850,10 @@ createServer(async (req, res) => {
     }
     if (parts[1] === 'verifications' && req.method === 'GET') return send(req, res, 200, await pendingVerifications(url));
     if (parts[1] === 'verifications' && parts[4] === 'decision' && req.method === 'PUT') return send(req, res, 200, await decideVerification(parts[2], Number(parts[3]), await readBody(req)));
+    if (parts[1] === 'student-course-flow' && req.method === 'GET') return send(req, res, 200, await courseFlow(url));
+    if (parts[1] === 'student-course-flow' && parts[2] === 'requests' && req.method === 'POST') return send(req, res, 201, await createCourseRequest(await readBody(req)));
+    if (parts[1] === 'student-course-flow' && parts[2] === 'requests' && parts[4] === 'decision' && req.method === 'PUT') return send(req, res, 200, await decideCourseRequest(Number(parts[3]), await readBody(req)));
+    if (parts[1] === 'student-course-flow' && parts[2] === 'assignments' && req.method === 'POST') return send(req, res, 201, await createStudentTeacherAssignment(await readBody(req)));
     if (parts[1] === 'dashboard') return send(req, res, 200, await dashboard());
     if (parts[1] === 'fee-tracker' && req.method === 'GET') return send(req, res, 200, await feeTracker(url));
     if (parts[1] === 'fee-tracker' && parts[2] === 'payments' && req.method === 'POST') return send(req, res, 201, await createFeePayment(await readBody(req)));
