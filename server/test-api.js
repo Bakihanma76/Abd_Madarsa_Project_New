@@ -132,9 +132,9 @@ const run = async () => {
 
   const feeTracker = await request('/fee-tracker?institutionId=1');
   assert(feeTracker.students.length > 0, 'Fee tracker should list students');
-  const feeStudent = feeTracker.students[0];
+  const feeStudent = feeTracker.students.find((student) => student.studentName === 'Ahmed Hassan Ali') || feeTracker.students[0];
   const beforeBalance = Number(feeStudent.balance || 0);
-  await request('/fee-tracker/payments', 201, {
+  const feePayment = await request('/fee-tracker/payments', 201, {
     method: 'POST',
     body: JSON.stringify({
       institutionId: 1,
@@ -150,6 +150,11 @@ const run = async () => {
   const feeTrackerAfterPayment = await request('/fee-tracker?institutionId=1');
   const feeStudentAfterPayment = feeTrackerAfterPayment.students.find((student) => student.studentId === feeStudent.studentId);
   assert(Number(feeStudentAfterPayment.balance) === beforeBalance - 50, 'Fee payment should reduce student balance');
+  const feeParentNotifications = await request('/notifications?role=parent&institutionId=1&recipientName=Hassan%20Ali&studentName=Ahmed%20Hassan%20Ali');
+  assert(feeParentNotifications.some((note) => note.relatedType === 'fee_payment' && note.relatedId === feePayment.id), 'Parent should receive fee payment receipt notification');
+  const receiptResponse = await fetch(baseUrl + '/fee-receipts/' + feePayment.id + '/pdf');
+  assert(receiptResponse.status === 200, 'Fee receipt PDF endpoint should return 200');
+  assert((receiptResponse.headers.get('content-type') || '').includes('application/pdf'), 'Fee receipt should be a PDF');
 
   const leave = await request('/leave-requests', 201, {
     method: 'POST',

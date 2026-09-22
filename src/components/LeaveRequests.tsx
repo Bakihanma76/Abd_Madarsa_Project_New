@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Bell, CalendarDays, Check, Clock, Send, X } from 'lucide-react';
-import { apiRequest } from '../api';
+import { Bell, CalendarDays, Check, Clock, Download, Send, X } from 'lucide-react';
+import { apiRequest, downloadApiFile } from '../api';
 import type { AppUser } from '../access';
 
 type LeaveRequest = {
@@ -25,6 +25,8 @@ type Notification = {
   title: string;
   message: string;
   status: 'Unread' | 'Read';
+  relatedType?: string | null;
+  relatedId?: number | null;
   createdAt?: string;
 };
 
@@ -88,6 +90,7 @@ const LeaveRequests: React.FC<LeaveRequestsProps> = ({ user }) => {
         institutionId: String(user.institutionId || 1),
       });
       if (recipientName) notificationParams.set('recipientName', recipientName);
+      if (scopedStudentName) notificationParams.set('studentName', scopedStudentName);
 
       const [requestRows, notificationRows, studentRows] = await Promise.all([
         apiRequest<LeaveRequest[]>('/leave-requests?' + params.toString()),
@@ -274,6 +277,16 @@ const LeaveRequests: React.FC<LeaveRequestsProps> = ({ user }) => {
                   {notification.status === 'Unread' && <span className="text-[10px] uppercase tracking-wide text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">New</span>}
                 </div>
                 <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
+                {user.role === 'parent' && notification.relatedType === 'fee_payment' && notification.relatedId && (
+                  <button
+                    type="button"
+                    onClick={() => downloadApiFile('/fee-receipts/' + notification.relatedId + '/pdf', 'fee-receipt-' + notification.relatedId + '.pdf').catch((err) => setError(err instanceof Error ? err.message : 'Unable to download receipt'))}
+                    className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700"
+                  >
+                    <Download className="w-3 h-3" />
+                    Download receipt
+                  </button>
+                )}
                 <div className="flex items-center gap-1 text-xs text-gray-400 mt-2"><Clock className="w-3 h-3" />{formatDate(notification.createdAt)}</div>
               </div>
             ))}

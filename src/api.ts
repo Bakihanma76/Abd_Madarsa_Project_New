@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
+export const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
 
 export const apiRequest = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -25,3 +25,17 @@ export const updateResource = <T>(resource: string, id: number, data: unknown) =
   apiRequest<T>(`/${resource}/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 export const deleteResource = (resource: string, id: number) =>
   apiRequest<void>(`/${resource}/${id}`, { method: 'DELETE' });
+
+export const downloadApiFile = async (path: string, filename: string) => {
+  const response = await fetch(`${API_BASE}${path}`);
+  if (!response.ok) throw new Error(await response.text() || `Download failed with ${response.status}`);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};

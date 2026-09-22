@@ -66,6 +66,18 @@ const send = (req, res, status, payload) => {
   res.end(JSON.stringify(payload));
 };
 
+const sendPdf = (req, res, filename, buffer) => {
+  res.writeHead(200, {
+    'Access-Control-Allow-Origin': corsOrigin(req),
+    'Vary': 'Origin',
+    'Access-Control-Allow-Methods': 'GET,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Content-Type': 'application/pdf',
+    'Content-Disposition': `attachment; filename="${filename}"`,
+  });
+  res.end(buffer);
+};
+
 const readBody = async (req) => {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
@@ -367,6 +379,7 @@ const notifications = async (url) => {
   const role = url.searchParams.get('role') || 'admin';
   const institutionId = Number(url.searchParams.get('institutionId') || 1);
   const recipientName = url.searchParams.get('recipientName') || '';
+  const studentName = url.searchParams.get('studentName') || '';
   const conditions = ['institutionId = :institutionId'];
   const params = { institutionId };
 
@@ -374,7 +387,12 @@ const notifications = async (url) => {
     conditions.push('recipientRole = :role');
     params.role = role;
     if (recipientName) {
-      conditions.push('(recipientName = :recipientName OR recipientName IS NULL)');
+      if (role === 'parent' && studentName) {
+        conditions.push('(recipientName = :recipientName OR recipientName = :studentName OR recipientName IS NULL)');
+        params.studentName = studentName;
+      } else {
+        conditions.push('(recipientName = :recipientName OR recipientName IS NULL)');
+      }
       params.recipientName = recipientName;
     }
   }
@@ -1099,7 +1117,86 @@ const createFeePayment = async (body) => {
     category: 'Tuition',
   });
 
+  await insert('notifications', {
+    institutionId,
+    recipientRole: 'parent',
+    recipientName: student.name,
+    title: 'Fee payment received',
+    message: 'Payment received for ' + student.name + ': Rs ' + amount.toLocaleString('en-IN') + ' on ' + paymentDate + '. Receipt #' + payment.id + ' is ready to download.',
+    status: 'Unread',
+    relatedType: 'fee_payment',
+    relatedId: payment.id,
+  });
+
   return payment;
+};
+
+const feeReceipt = async (id) => {
+  const [receipt] = await rows(
+    `SELECT fee_payments.*, institutions.name AS institutionName
+     FROM fee_payments
+     LEFT JOIN institutions ON institutions.id = fee_payments.institutionId
+     WHERE fee_payments.id = :id
+     LIMIT 1`,
+    { id },
+  );
+  if (!receipt) throw new Error('Receipt not found');
+  return receipt;
+};
+
+const pdfEscape = (value) => String(value ?? '').replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+
+const buildReceiptPdf = (receipt) => {
+  const lines = [
+    receipt.institutionName || 'Madarsa Management',
+    'Fee Payment Receipt',
+    'Receipt No: ' + receipt.id,
+    'Student: ' + receipt.studentName,
+    'Parent/Guardian: ' + (receipt.parentName || '-'),
+    'Amount Paid: Rs ' + Number(receipt.amount || 0).toLocaleString('en-IN'),
+    'Payment Date: ' + dateOnly(new Date(receipt.paymentDate)),
+    'Paid Till Month: ' + (receipt.paidTillMonth || '-'),
+    'Balance From: ' + (receipt.fromDate ? dateOnly(new Date(receipt.fromDate)) : '-'),
+    'Balance Till: ' + (receipt.tillDate ? dateOnly(new Date(receipt.tillDate)) : '-'),
+    'Verified By: ' + (receipt.verifiedBy || 'Principal'),
+    'Verified At: ' + (receipt.verifiedAt ? new Date(receipt.verifiedAt).toLocaleString('en-IN') : '-'),
+    'Notes: ' + (receipt.notes || '-'),
+  ];
+  const content = [
+    'BT',
+    '/F1 18 Tf',
+    '72 760 Td',
+    '(' + pdfEscape(lines[0]) + ') Tj',
+    '/F1 14 Tf',
+    '0 -28 Td',
+    '(' + pdfEscape(lines[1]) + ') Tj',
+    '/F1 11 Tf',
+    ...lines.slice(2).flatMap((line) => ['0 -22 Td', '(' + pdfEscape(line) + ') Tj']),
+    '0 -38 Td',
+    '(This computer-generated receipt confirms the payment recorded by the institution.) Tj',
+    'ET',
+  ].join('\n');
+
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    '<< /Length ' + Buffer.byteLength(content, 'latin1') + ' >>\nstream\n' + content + '\nendstream',
+  ];
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(Buffer.byteLength(pdf, 'latin1'));
+    pdf += (index + 1) + ' 0 obj\n' + object + '\nendobj\n';
+  });
+  const xrefOffset = Buffer.byteLength(pdf, 'latin1');
+  pdf += 'xref\n0 ' + (objects.length + 1) + '\n0000000000 65535 f \n';
+  offsets.slice(1).forEach((offset) => {
+    pdf += String(offset).padStart(10, '0') + ' 00000 n \n';
+  });
+  pdf += 'trailer\n<< /Size ' + (objects.length + 1) + ' /Root 1 0 R >>\nstartxref\n' + xrefOffset + '\n%%EOF';
+  return Buffer.from(pdf, 'latin1');
 };
 const dashboard = async () => {
   const stats = {
@@ -1185,6 +1282,10 @@ createServer(async (req, res) => {
     if (parts[1] === 'dashboard') return send(req, res, 200, await dashboard());
     if (parts[1] === 'fee-tracker' && req.method === 'GET') return send(req, res, 200, await feeTracker(url));
     if (parts[1] === 'fee-tracker' && parts[2] === 'payments' && req.method === 'POST') return send(req, res, 201, await createFeePayment(await readBody(req)));
+    if (parts[1] === 'fee-receipts' && parts[3] === 'pdf' && req.method === 'GET') {
+      const receipt = await feeReceipt(Number(parts[2]));
+      return sendPdf(req, res, 'fee-receipt-' + receipt.id + '.pdf', buildReceiptPdf(receipt));
+    }
     if (parts[1] === 'leave-requests' && req.method === 'GET') return send(req, res, 200, await leaveRequests(url));
     if (parts[1] === 'leave-requests' && req.method === 'POST') return send(req, res, 201, await createLeaveRequest(await readBody(req)));
     if (parts[1] === 'leave-requests' && parts[3] === 'decision' && req.method === 'PUT') return send(req, res, 200, await decideLeaveRequest(Number(parts[2]), await readBody(req)));
