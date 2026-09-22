@@ -6,6 +6,9 @@ import type { AppUser } from '../access';
 type FlowStudent = { id: number; name: string; grade: string };
 type FlowTeacher = { id: number; name: string; subject: string };
 type FlowCourse = { id: number; name: string };
+type AcademicYear = { id: number; name: string };
+type Grade = { id: number; name: string; level: number };
+type Section = { id: number; gradeId: number; name: string };
 type CourseRequest = {
   id: number;
   studentName: string;
@@ -14,13 +17,16 @@ type CourseRequest = {
   reason?: string | null;
   status: 'Pending' | 'Approved' | 'Rejected';
 };
-type Assignment = { id: number; studentName: string; teacherName: string; courseName?: string | null; assignedBy: string };
+type Assignment = { id: number; studentName?: string; teacherName: string; courseName?: string | null; assignedBy: string; assignmentMode?: string; academicYearName?: string; gradeName?: string; sectionName?: string };
 type FlowData = {
   students: FlowStudent[];
   teachers: FlowTeacher[];
   courses: FlowCourse[];
   requests: CourseRequest[];
   assignments: Assignment[];
+  academicYears?: AcademicYear[];
+  grades?: Grade[];
+  sections?: Section[];
 };
 
 type CourseWorkflowProps = {
@@ -35,6 +41,7 @@ const CourseWorkflow: React.FC<CourseWorkflowProps> = ({ user, onError }) => {
   const [saving, setSaving] = useState(false);
   const [requestForm, setRequestForm] = useState({ studentId: '', courseId: '', reason: '' });
   const [assignForm, setAssignForm] = useState({ studentId: '', teacherId: '', courseId: '', notes: '' });
+  const [classForm, setClassForm] = useState({ academicYearId: '', gradeId: '', sectionId: '', courseId: '', teacherId: '', notes: '' });
   const isApprover = canApprove(user);
 
   const load = async () => {
@@ -57,6 +64,14 @@ const CourseWorkflow: React.FC<CourseWorkflowProps> = ({ user, onError }) => {
         studentId: current.studentId || String(result.students[0]?.id || ''),
         teacherId: current.teacherId || String(result.teachers[0]?.id || ''),
         courseId: current.courseId || String(result.courses[0]?.id || ''),
+      }));
+      setClassForm((current) => ({
+        ...current,
+        academicYearId: current.academicYearId || String(result.academicYears?.[0]?.id || ''),
+        gradeId: current.gradeId || String(result.grades?.[0]?.id || ''),
+        sectionId: current.sectionId || String(result.sections?.[0]?.id || ''),
+        courseId: current.courseId || String(result.courses[0]?.id || ''),
+        teacherId: current.teacherId || String(result.teachers[0]?.id || ''),
       }));
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Unable to load course workflow');
@@ -96,6 +111,21 @@ const CourseWorkflow: React.FC<CourseWorkflowProps> = ({ user, onError }) => {
       notes: assignForm.notes,
     });
     setAssignForm((current) => ({ ...current, notes: '' }));
+  };
+
+  const submitClassAssignment = async (event: React.FormEvent) => {
+    event.preventDefault();
+    await submit('/class-course-assignments', {
+      institutionId: user.institutionId || 1,
+      academicYearId: Number(classForm.academicYearId),
+      gradeId: Number(classForm.gradeId),
+      sectionId: Number(classForm.sectionId),
+      courseId: Number(classForm.courseId),
+      teacherId: Number(classForm.teacherId),
+      assignedBy: user.name,
+      notes: classForm.notes,
+    });
+    setClassForm((current) => ({ ...current, notes: '' }));
   };
 
   const submit = async (path: string, body: unknown) => {
@@ -138,6 +168,18 @@ const CourseWorkflow: React.FC<CourseWorkflowProps> = ({ user, onError }) => {
           <Text label="Reason" value={requestForm.reason} onChange={(reason) => setRequestForm({ ...requestForm, reason })} placeholder="Why this student needs this course" />
           <button type="submit" disabled={saving || !flow.students.length || !flow.courses.length} className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">{saving ? 'Saving...' : 'Send to Principal'}</button>
           {(!flow.students.length || !flow.courses.length) && <p className="text-sm text-amber-700 md:col-span-2">Principal must assign students and active courses to this teacher before course requests can be sent.</p>}
+        </WorkflowForm>
+      )}
+
+      {isApprover && (
+        <WorkflowForm icon={<UserCheck className="w-5 h-5 text-blue-600" />} title="Class Course Assignment" onSubmit={submitClassAssignment}>
+          <Select label="Academic Year" value={classForm.academicYearId} onChange={(academicYearId) => setClassForm({ ...classForm, academicYearId })} options={(flow.academicYears || []).map((year) => ({ value: year.id, label: year.name }))} required />
+          <Select label="Grade" value={classForm.gradeId} onChange={(gradeId) => setClassForm({ ...classForm, gradeId, sectionId: '' })} options={(flow.grades || []).map((grade) => ({ value: grade.id, label: grade.name }))} required />
+          <Select label="Section" value={classForm.sectionId} onChange={(sectionId) => setClassForm({ ...classForm, sectionId })} options={(flow.sections || []).filter((section) => String(section.gradeId) === String(classForm.gradeId)).map((section) => ({ value: section.id, label: section.name }))} required />
+          <Select label="Course" value={classForm.courseId} onChange={(courseId) => setClassForm({ ...classForm, courseId })} options={flow.courses.map((course) => ({ value: course.id, label: course.name }))} required />
+          <Select label="Teacher" value={classForm.teacherId} onChange={(teacherId) => setClassForm({ ...classForm, teacherId })} options={flow.teachers.map((teacher) => ({ value: teacher.id, label: teacher.name + ' - ' + teacher.subject }))} required />
+          <Text label="Notes" value={classForm.notes} onChange={(notes) => setClassForm({ ...classForm, notes })} placeholder="Class assignment note" />
+          <button type="submit" disabled={saving} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">{saving ? 'Saving...' : 'Assign Class Course'}</button>
         </WorkflowForm>
       )}
 
@@ -226,10 +268,10 @@ const RequestsTable: React.FC<RequestsTableProps> = ({ requests, canApprove, onD
 const AssignmentsTable: React.FC<{ assignments: Assignment[] }> = ({ assignments }) => (
   <div className="bg-white rounded-xl shadow-sm overflow-hidden xl:col-span-2">
     <TableTitle title="Active Student Teacher Assignments" />
-    <DataTable headers={['Student', 'Teacher', 'Course', 'Assigned By']} empty="No teacher assignments yet." colSpan={4} isEmpty={!assignments.length}>
+    <DataTable headers={['Scope', 'Teacher', 'Course', 'Assigned By']} empty="No teacher assignments yet." colSpan={4} isEmpty={!assignments.length}>
       {assignments.map((assignment) => (
         <tr key={assignment.id} className="hover:bg-gray-50">
-          <td className="px-5 py-4 text-sm font-medium text-gray-900">{assignment.studentName}</td>
+          <td className="px-5 py-4 text-sm font-medium text-gray-900">{assignment.assignmentMode === 'Class' ? `${assignment.academicYearName} / ${assignment.gradeName} / ${assignment.sectionName}` : assignment.studentName}</td>
           <td className="px-5 py-4 text-sm text-gray-700">{assignment.teacherName}</td>
           <td className="px-5 py-4 text-sm text-gray-700">{assignment.courseName || '-'}</td>
           <td className="px-5 py-4 text-sm text-gray-700">{assignment.assignedBy}</td>

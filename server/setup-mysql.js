@@ -236,6 +236,64 @@ await connection.query(`
     status ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
     createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS academic_years (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    institutionId INT NOT NULL DEFAULT 1,
+    name VARCHAR(50) NOT NULL,
+    startDate DATE,
+    endDate DATE,
+    status ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
+    UNIQUE KEY unique_academic_year (institutionId, name)
+  );
+
+  CREATE TABLE IF NOT EXISTS academic_grades (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    institutionId INT NOT NULL DEFAULT 1,
+    name VARCHAR(100) NOT NULL,
+    level INT NOT NULL,
+    status ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
+    UNIQUE KEY unique_grade (institutionId, name)
+  );
+
+  CREATE TABLE IF NOT EXISTS academic_sections (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    institutionId INT NOT NULL DEFAULT 1,
+    gradeId INT NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    status ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
+    UNIQUE KEY unique_grade_section (institutionId, gradeId, name)
+  );
+
+  CREATE TABLE IF NOT EXISTS student_enrollments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    institutionId INT NOT NULL DEFAULT 1,
+    studentId INT NOT NULL,
+    academicYearId INT NOT NULL,
+    gradeId INT NOT NULL,
+    sectionId INT NOT NULL,
+    rollNumber VARCHAR(50),
+    status ENUM('Active', 'Completed', 'Transferred', 'Inactive') NOT NULL DEFAULT 'Active',
+    enrolledAt DATE NOT NULL,
+    promotedAt DATE,
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_student_year (institutionId, studentId, academicYearId)
+  );
+
+  CREATE TABLE IF NOT EXISTS class_course_assignments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    institutionId INT NOT NULL DEFAULT 1,
+    academicYearId INT NOT NULL,
+    gradeId INT NOT NULL,
+    sectionId INT NOT NULL,
+    courseId INT NOT NULL,
+    teacherId INT NOT NULL,
+    assignedBy VARCHAR(255) NOT NULL,
+    notes TEXT,
+    status ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_class_course_teacher (institutionId, academicYearId, gradeId, sectionId, courseId, teacherId)
+  );
 `);
 
 const addColumnIfMissing = async (table, column, definition) => {
@@ -253,7 +311,7 @@ const addColumnIfMissing = async (table, column, definition) => {
   }
 };
 
-for (const table of ['users', 'students', 'teachers', 'courses', 'exams', 'leave_requests', 'notifications', 'fee_charges', 'fee_payments', 'student_course_requests', 'student_teacher_assignments']) {
+for (const table of ['users', 'students', 'teachers', 'courses', 'exams', 'leave_requests', 'notifications', 'fee_charges', 'fee_payments', 'student_course_requests', 'student_teacher_assignments', 'academic_years', 'academic_grades', 'academic_sections', 'student_enrollments', 'class_course_assignments']) {
   await addColumnIfMissing(table, 'institutionId', 'INT NOT NULL DEFAULT 1 AFTER id');
   await connection.query(`UPDATE \`${table}\` SET institutionId = 1 WHERE institutionId IS NULL`);
 }
@@ -279,6 +337,79 @@ await connection.query(`
   WHERE assignments.status = 'Active' AND assignments.id <> duplicates.keepId
 `);
 await connection.query("ALTER TABLE institutions MODIFY type ENUM('university', 'school', 'madarsa') NOT NULL DEFAULT 'madarsa'");
+
+const ensureAcademicStructure = async () => {
+  const [institutions] = await connection.query('SELECT id FROM institutions');
+  const institutionIds = institutions.length ? institutions.map((row) => row.id) : [1];
+
+  for (const institutionId of institutionIds) {
+    await connection.execute(
+      `INSERT IGNORE INTO academic_years (institutionId, name, startDate, endDate, status)
+       VALUES (?, '2026-2027', '2026-04-01', '2027-03-31', 'Active')`,
+      [institutionId],
+    );
+
+    for (let level = 1; level <= 10; level += 1) {
+      await connection.execute(
+        `INSERT IGNORE INTO academic_grades (institutionId, name, level, status)
+         VALUES (?, ?, ?, 'Active')`,
+        [institutionId, `Grade ${level}`, level],
+      );
+    }
+
+    const [grades] = await connection.query('SELECT id FROM academic_grades WHERE institutionId = ?', [institutionId]);
+    for (const grade of grades) {
+      for (const section of ['A', 'B']) {
+        await connection.execute(
+          `INSERT IGNORE INTO academic_sections (institutionId, gradeId, name, status)
+           VALUES (?, ?, ?, 'Active')`,
+          [institutionId, grade.id, section],
+        );
+      }
+    }
+  }
+};
+
+const backfillStudentEnrollments = async () => {
+  const [students] = await connection.query(`
+    SELECT students.id, students.institutionId, students.grade, students.admissionDate
+    FROM students
+    LEFT JOIN student_enrollments ON student_enrollments.studentId = students.id AND student_enrollments.status = 'Active'
+    WHERE students.status = 'Active' AND student_enrollments.id IS NULL
+  `);
+
+  for (const student of students) {
+    const [[year]] = await connection.query(
+      `SELECT id FROM academic_years WHERE institutionId = ? AND status = 'Active' ORDER BY id DESC LIMIT 1`,
+      [student.institutionId || 1],
+    );
+    const [[grade]] = await connection.query(
+      `SELECT id FROM academic_grades WHERE institutionId = ? AND name = ? LIMIT 1`,
+      [student.institutionId || 1, student.grade || 'Grade 1'],
+    );
+    const [[fallbackGrade]] = grade ? [[grade]] : await connection.query(
+      `SELECT id FROM academic_grades WHERE institutionId = ? ORDER BY level LIMIT 1`,
+      [student.institutionId || 1],
+    );
+    const gradeId = (grade || fallbackGrade)?.id;
+    if (!year?.id || !gradeId) continue;
+
+    const [[section]] = await connection.query(
+      `SELECT id FROM academic_sections WHERE institutionId = ? AND gradeId = ? ORDER BY name LIMIT 1`,
+      [student.institutionId || 1, gradeId],
+    );
+    if (!section?.id) continue;
+
+    await connection.execute(
+      `INSERT IGNORE INTO student_enrollments (institutionId, studentId, academicYearId, gradeId, sectionId, rollNumber, status, enrolledAt)
+       VALUES (?, ?, ?, ?, ?, NULL, 'Active', ?)`,
+      [student.institutionId || 1, student.id, year.id, gradeId, section.id, student.admissionDate || new Date()],
+    );
+  }
+};
+
+await ensureAcademicStructure();
+await backfillStudentEnrollments();
 
 const backfillRegisteredStudents = async () => {
   const [studentUsers] = await connection.query(`

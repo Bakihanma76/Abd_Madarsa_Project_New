@@ -4,13 +4,17 @@ import { X, User, Phone, Mail, Calendar, Book } from 'lucide-react';
 interface StudentModalProps {
   student?: any;
   teachers?: Array<{ id: number; name: string; subject?: string; status?: string }>;
+  academicYears?: Array<{ id: number; name: string; status?: string }>;
+  grades?: Array<{ id: number; name: string; level: number; status?: string }>;
+  sections?: Array<{ id: number; gradeId: number; name: string; status?: string }>;
   onClose: () => void;
   onSave: (studentData: any) => void;
 }
 
 const dateInputValue = (value?: string) => value ? value.slice(0, 10) : '';
 
-const StudentModal: React.FC<StudentModalProps> = ({ student, teachers = [], onClose, onSave }) => {
+const StudentModal: React.FC<StudentModalProps> = ({ student, teachers = [], academicYears = [], grades = [], sections = [], onClose, onSave }) => {
+  const initialGradeId = student?.gradeId ? String(student.gradeId) : '';
   const [formData, setFormData] = useState({
     name: student?.name || '',
     grade: student?.grade || '',
@@ -24,8 +28,14 @@ const StudentModal: React.FC<StudentModalProps> = ({ student, teachers = [], onC
     emergencyContact: student?.emergencyContact || '',
     medicalInfo: student?.medicalInfo || '',
     status: student?.status || 'Active',
+    academicYearId: student?.academicYearId ? String(student.academicYearId) : '',
+    gradeId: initialGradeId,
+    sectionId: student?.sectionId ? String(student.sectionId) : '',
+    rollNumber: student?.rollNumber || '',
     assignedTeacherId: student?.assignedTeacherId ? String(student.assignedTeacherId) : '',
   });
+
+  const availableSections = sections.filter((section) => String(section.gradeId) === String(formData.gradeId));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -219,6 +229,69 @@ const StudentModal: React.FC<StudentModalProps> = ({ student, teachers = [], onC
                     name="admissionDate"
                     value={formData.admissionDate}
                     onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Academic Year</label>
+                  <select
+                    name="academicYearId"
+                    value={formData.academicYearId}
+                    onChange={handleChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  >
+                    <option value="">Select Academic Year</option>
+                    {academicYears.filter((year) => !year.status || year.status === 'Active').map((year) => (
+                      <option key={year.id} value={year.id}>{year.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Academic Grade</label>
+                  <select
+                    name="gradeId"
+                    value={formData.gradeId}
+                    onChange={(event) => {
+                      const selectedGrade = grades.find((grade) => String(grade.id) === event.target.value);
+                      setFormData({ ...formData, gradeId: event.target.value, grade: selectedGrade?.name || formData.grade, sectionId: '' });
+                    }}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  >
+                    <option value="">Select Grade</option>
+                    {grades.filter((grade) => !grade.status || grade.status === 'Active').map((grade) => (
+                      <option key={grade.id} value={grade.id}>{grade.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Section</label>
+                  <select
+                    name="sectionId"
+                    value={formData.sectionId}
+                    onChange={handleChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  >
+                    <option value="">Select Section</option>
+                    {availableSections.map((section) => (
+                      <option key={section.id} value={section.id}>{section.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Roll Number</label>
+                  <input
+                    type="text"
+                    name="rollNumber"
+                    value={formData.rollNumber}
+                    onChange={handleChange}
+                    placeholder="Optional"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   />
                 </div>

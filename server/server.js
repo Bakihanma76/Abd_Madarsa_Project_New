@@ -470,8 +470,19 @@ const studentList = async () => rows(`
     assignments.teacherId AS assignedTeacherId,
     assignments.teacherName AS assignedTeacherName,
     assignments.courseId AS assignedCourseId,
-    assignments.courseName AS assignedCourseName
+    assignments.courseName AS assignedCourseName,
+    enrollments.academicYearId,
+    academic_years.name AS academicYearName,
+    enrollments.gradeId,
+    academic_grades.name AS academicGradeName,
+    enrollments.sectionId,
+    academic_sections.name AS sectionName,
+    enrollments.rollNumber
   FROM students
+  LEFT JOIN student_enrollments enrollments ON enrollments.institutionId = students.institutionId AND enrollments.studentId = students.id AND enrollments.status = 'Active'
+  LEFT JOIN academic_years ON academic_years.id = enrollments.academicYearId
+  LEFT JOIN academic_grades ON academic_grades.id = enrollments.gradeId
+  LEFT JOIN academic_sections ON academic_sections.id = enrollments.sectionId
   LEFT JOIN (
     SELECT a.*
     FROM student_teacher_assignments a
@@ -487,16 +498,45 @@ const studentList = async () => rows(`
 
 const saveStudent = async (id, body) => {
   const studentData = normalize(resources.students, body);
+  const academicYearId = Number(body.academicYearId || 0);
+  const gradeId = Number(body.gradeId || 0);
+  const sectionId = Number(body.sectionId || 0);
   const assignedTeacherId = Number(body.assignedTeacherId || 0);
+  if (!academicYearId || !gradeId || !sectionId) throw new Error('Academic year, grade, and section are required for student admission');
   if (!assignedTeacherId) throw new Error('Assigned teacher is required for student admission');
 
-  const [teacher] = await rows(
-    'SELECT id, name FROM teachers WHERE institutionId = :institutionId AND id = :teacherId AND status = :status LIMIT 1',
-    { institutionId: Number(studentData.institutionId || 1), teacherId: assignedTeacherId, status: 'Active' },
-  );
+  const institutionId = Number(studentData.institutionId || 1);
+  const [[teacher], [year], [grade], [section]] = await Promise.all([
+    rows('SELECT id, name FROM teachers WHERE institutionId = :institutionId AND id = :teacherId AND status = :status LIMIT 1', { institutionId, teacherId: assignedTeacherId, status: 'Active' }),
+    rows('SELECT id, name FROM academic_years WHERE institutionId = :institutionId AND id = :academicYearId AND status = :status LIMIT 1', { institutionId, academicYearId, status: 'Active' }),
+    rows('SELECT id, name FROM academic_grades WHERE institutionId = :institutionId AND id = :gradeId AND status = :status LIMIT 1', { institutionId, gradeId, status: 'Active' }),
+    rows('SELECT id, name FROM academic_sections WHERE institutionId = :institutionId AND id = :sectionId AND gradeId = :gradeId AND status = :status LIMIT 1', { institutionId, sectionId, gradeId, status: 'Active' }),
+  ]);
   if (!teacher) throw new Error('Active assigned teacher not found');
+  if (!year || !grade || !section) throw new Error('Active academic year, grade, or section not found');
+  studentData.grade = grade.name;
 
   const saved = id ? await update('students', id, studentData) : await insert('students', studentData);
+  await rows(
+    `UPDATE student_enrollments
+     SET status = 'Inactive'
+     WHERE institutionId = :institutionId AND studentId = :studentId AND status = 'Active'`,
+    { institutionId: saved.institutionId, studentId: saved.id },
+  );
+  await rows(
+    `INSERT INTO student_enrollments (institutionId, studentId, academicYearId, gradeId, sectionId, rollNumber, status, enrolledAt)
+     VALUES (:institutionId, :studentId, :academicYearId, :gradeId, :sectionId, :rollNumber, 'Active', :enrolledAt)
+     ON DUPLICATE KEY UPDATE gradeId = VALUES(gradeId), sectionId = VALUES(sectionId), rollNumber = VALUES(rollNumber), status = 'Active'`,
+    {
+      institutionId: saved.institutionId,
+      studentId: saved.id,
+      academicYearId,
+      gradeId,
+      sectionId,
+      rollNumber: String(body.rollNumber || '').trim() || null,
+      enrolledAt: saved.admissionDate || dateOnly(),
+    },
+  );
   await rows(
     `UPDATE student_teacher_assignments
      SET status = 'Inactive'
@@ -513,14 +553,75 @@ const saveStudent = async (id, body) => {
   });
 
   return (await rows(
-    `SELECT students.*, assignments.teacherId AS assignedTeacherId, assignments.teacherName AS assignedTeacherName, assignments.courseId AS assignedCourseId, assignments.courseName AS assignedCourseName
+    `SELECT students.*, assignments.teacherId AS assignedTeacherId, assignments.teacherName AS assignedTeacherName, assignments.courseId AS assignedCourseId, assignments.courseName AS assignedCourseName,
+            enrollments.academicYearId, enrollments.gradeId, enrollments.sectionId, enrollments.rollNumber,
+            academic_years.name AS academicYearName, academic_grades.name AS academicGradeName, academic_sections.name AS sectionName
      FROM students
+     LEFT JOIN student_enrollments enrollments ON enrollments.institutionId = students.institutionId AND enrollments.studentId = students.id AND enrollments.status = 'Active'
+     LEFT JOIN academic_years ON academic_years.id = enrollments.academicYearId
+     LEFT JOIN academic_grades ON academic_grades.id = enrollments.gradeId
+     LEFT JOIN academic_sections ON academic_sections.id = enrollments.sectionId
      LEFT JOIN student_teacher_assignments assignments ON assignments.institutionId = students.institutionId AND assignments.studentId = students.id AND assignments.status = 'Active'
      WHERE students.id = :id
      ORDER BY assignments.id DESC
      LIMIT 1`,
     { id: saved.id },
   ))[0] || saved;
+};
+
+const academicStructure = async (url) => {
+  const institutionId = Number(url.searchParams.get('institutionId') || 1);
+  const [academicYears, grades, sections, courses, teachers, classAssignments] = await Promise.all([
+    rows(`SELECT * FROM academic_years WHERE institutionId = :institutionId ORDER BY startDate DESC, id DESC`, { institutionId }),
+    rows(`SELECT * FROM academic_grades WHERE institutionId = :institutionId ORDER BY level`, { institutionId }),
+    rows(`SELECT * FROM academic_sections WHERE institutionId = :institutionId ORDER BY gradeId, name`, { institutionId }),
+    rows(`SELECT id, name, grade, teacher, status FROM courses WHERE institutionId = :institutionId AND status = 'Active' ORDER BY name`, { institutionId }),
+    rows(`SELECT id, name, subject, status FROM teachers WHERE institutionId = :institutionId AND status = 'Active' ORDER BY name`, { institutionId }),
+    rows(`
+      SELECT assignments.*, academic_years.name AS academicYearName, academic_grades.name AS gradeName,
+             academic_sections.name AS sectionName, courses.name AS courseName, teachers.name AS teacherName
+      FROM class_course_assignments assignments
+      JOIN academic_years ON academic_years.id = assignments.academicYearId
+      JOIN academic_grades ON academic_grades.id = assignments.gradeId
+      JOIN academic_sections ON academic_sections.id = assignments.sectionId
+      JOIN courses ON courses.id = assignments.courseId
+      JOIN teachers ON teachers.id = assignments.teacherId
+      WHERE assignments.institutionId = :institutionId AND assignments.status = 'Active'
+      ORDER BY academic_years.name DESC, academic_grades.level, academic_sections.name, courses.name
+    `, { institutionId }),
+  ]);
+  return { academicYears, grades, sections, courses, teachers, classAssignments };
+};
+
+const createClassCourseAssignment = async (body) => {
+  const institutionId = Number(body.institutionId || 1);
+  const academicYearId = Number(body.academicYearId || 0);
+  const gradeId = Number(body.gradeId || 0);
+  const sectionId = Number(body.sectionId || 0);
+  const courseId = Number(body.courseId || 0);
+  const teacherId = Number(body.teacherId || 0);
+  if (!academicYearId || !gradeId || !sectionId || !courseId || !teacherId) throw new Error('Academic year, grade, section, course, and teacher are required');
+
+  const [existing] = await rows(
+    `SELECT * FROM class_course_assignments
+     WHERE institutionId = :institutionId AND academicYearId = :academicYearId AND gradeId = :gradeId
+       AND sectionId = :sectionId AND courseId = :courseId AND teacherId = :teacherId AND status = 'Active'
+     LIMIT 1`,
+    { institutionId, academicYearId, gradeId, sectionId, courseId, teacherId },
+  );
+  if (existing) return existing;
+
+  return insert('class_course_assignments', {
+    institutionId,
+    academicYearId,
+    gradeId,
+    sectionId,
+    courseId,
+    teacherId,
+    assignedBy: String(body.assignedBy || 'Principal').trim(),
+    notes: String(body.notes || '').trim() || null,
+    status: 'Active',
+  });
 };
 
 const courseFlow = async (url) => {
@@ -531,24 +632,39 @@ const courseFlow = async (url) => {
   const studentSql = teacherOnly
     ? `SELECT DISTINCT students.id, students.name, students.grade, students.guardianName, students.status
        FROM students
-       JOIN student_teacher_assignments assignments ON assignments.institutionId = students.institutionId AND assignments.studentId = students.id AND assignments.status = 'Active'
-       WHERE students.institutionId = :institutionId AND students.status = 'Active' AND assignments.teacherName = :teacherName
+       LEFT JOIN student_enrollments enrollments ON enrollments.institutionId = students.institutionId AND enrollments.studentId = students.id AND enrollments.status = 'Active'
+       LEFT JOIN class_course_assignments classAssignments ON classAssignments.institutionId = students.institutionId
+        AND classAssignments.academicYearId = enrollments.academicYearId
+        AND classAssignments.gradeId = enrollments.gradeId
+        AND classAssignments.sectionId = enrollments.sectionId
+        AND classAssignments.status = 'Active'
+       LEFT JOIN teachers classTeachers ON classTeachers.id = classAssignments.teacherId
+       LEFT JOIN student_teacher_assignments individualAssignments ON individualAssignments.institutionId = students.institutionId
+        AND individualAssignments.studentId = students.id
+        AND individualAssignments.status = 'Active'
+       WHERE students.institutionId = :institutionId
+         AND students.status = 'Active'
+         AND (classTeachers.name = :teacherName OR individualAssignments.teacherName = :teacherName)
        ORDER BY students.name`
     : `SELECT id, name, grade, guardianName, status
        FROM students
        WHERE institutionId = :institutionId AND status = 'Active'
        ORDER BY name`;
   const courseSql = teacherOnly
-    ? `SELECT id, name, grade, teacher, status
+    ? `SELECT DISTINCT courses.id, courses.name, courses.grade, courses.teacher, courses.status
        FROM courses
-       WHERE institutionId = :institutionId AND status = 'Active' AND teacher = :teacherName
+       LEFT JOIN class_course_assignments assignments ON assignments.courseId = courses.id AND assignments.status = 'Active'
+       LEFT JOIN teachers ON teachers.id = assignments.teacherId
+       WHERE courses.institutionId = :institutionId
+         AND courses.status = 'Active'
+         AND (teachers.name = :teacherName OR courses.teacher = :teacherName)
        ORDER BY name`
     : `SELECT id, name, grade, teacher, status
        FROM courses
        WHERE institutionId = :institutionId AND status = 'Active'
        ORDER BY name`;
   const scopedParams = teacherOnly ? { institutionId, teacherName } : { institutionId };
-  const [studentRows, teacherRows, courseRows, requestRows, assignmentRows] = await Promise.all([
+  const [studentRows, teacherRows, courseRows, requestRows, assignmentRows, academicYears, grades, sections] = await Promise.all([
     rows(studentSql, scopedParams),
     rows(
       `SELECT id, name, subject, status
@@ -567,7 +683,7 @@ const courseFlow = async (url) => {
       { institutionId },
     ),
     rows(
-      `SELECT assignments.*
+      `SELECT assignments.*, 'Individual' AS assignmentMode
        FROM student_teacher_assignments assignments
        JOIN (
          SELECT institutionId, studentId, teacherId, COALESCE(courseId, 0) AS courseKey, MAX(id) AS id
@@ -579,9 +695,27 @@ const courseFlow = async (url) => {
        LIMIT 100`,
       { institutionId },
     ),
+    rows(`SELECT * FROM academic_years WHERE institutionId = :institutionId AND status = 'Active' ORDER BY startDate DESC, id DESC`, { institutionId }),
+    rows(`SELECT * FROM academic_grades WHERE institutionId = :institutionId AND status = 'Active' ORDER BY level`, { institutionId }),
+    rows(`SELECT * FROM academic_sections WHERE institutionId = :institutionId AND status = 'Active' ORDER BY gradeId, name`, { institutionId }),
   ]);
 
-  return { students: studentRows, teachers: teacherRows, courses: courseRows, requests: requestRows, assignments: assignmentRows };
+  const classAssignments = await rows(`
+    SELECT assignments.*, 'Class' AS assignmentMode, academic_years.name AS academicYearName,
+           academic_grades.name AS gradeName, academic_sections.name AS sectionName,
+           courses.name AS courseName, teachers.name AS teacherName
+    FROM class_course_assignments assignments
+    JOIN academic_years ON academic_years.id = assignments.academicYearId
+    JOIN academic_grades ON academic_grades.id = assignments.gradeId
+    JOIN academic_sections ON academic_sections.id = assignments.sectionId
+    JOIN courses ON courses.id = assignments.courseId
+    JOIN teachers ON teachers.id = assignments.teacherId
+    WHERE assignments.institutionId = :institutionId AND assignments.status = 'Active'
+    ORDER BY academic_years.name DESC, academic_grades.level, academic_sections.name, courses.name
+    LIMIT 100
+  `, { institutionId });
+
+  return { students: studentRows, teachers: teacherRows, courses: courseRows, requests: requestRows, assignments: [...classAssignments, ...assignmentRows], academicYears, grades, sections };
 };
 
 const createCourseRequest = async (body) => {
@@ -613,9 +747,18 @@ const createCourseRequest = async (body) => {
   if (!teacher) throw new Error('Active teacher not found');
 
   const [assignment] = await rows(
-    `SELECT id
-     FROM student_teacher_assignments
-     WHERE institutionId = :institutionId AND studentId = :studentId AND teacherId = :teacherId AND status = 'Active'
+    `SELECT individual.id
+     FROM student_teacher_assignments individual
+     WHERE individual.institutionId = :institutionId AND individual.studentId = :studentId AND individual.teacherId = :teacherId AND individual.status = 'Active'
+     UNION
+     SELECT classAssignments.id
+     FROM student_enrollments enrollments
+     JOIN class_course_assignments classAssignments ON classAssignments.institutionId = enrollments.institutionId
+      AND classAssignments.academicYearId = enrollments.academicYearId
+      AND classAssignments.gradeId = enrollments.gradeId
+      AND classAssignments.sectionId = enrollments.sectionId
+      AND classAssignments.status = 'Active'
+     WHERE enrollments.institutionId = :institutionId AND enrollments.studentId = :studentId AND classAssignments.teacherId = :teacherId AND enrollments.status = 'Active'
      LIMIT 1`,
     { institutionId, studentId, teacherId: teacher.id },
   );
@@ -951,6 +1094,8 @@ createServer(async (req, res) => {
     }
     if (parts[1] === 'verifications' && req.method === 'GET') return send(req, res, 200, await pendingVerifications(url));
     if (parts[1] === 'verifications' && parts[4] === 'decision' && req.method === 'PUT') return send(req, res, 200, await decideVerification(parts[2], Number(parts[3]), await readBody(req)));
+    if (parts[1] === 'academic-structure' && req.method === 'GET') return send(req, res, 200, await academicStructure(url));
+    if (parts[1] === 'class-course-assignments' && req.method === 'POST') return send(req, res, 201, await createClassCourseAssignment(await readBody(req)));
     if (parts[1] === 'student-course-flow' && req.method === 'GET') return send(req, res, 200, await courseFlow(url));
     if (parts[1] === 'student-course-flow' && parts[2] === 'requests' && req.method === 'POST') return send(req, res, 201, await createCourseRequest(await readBody(req)));
     if (parts[1] === 'student-course-flow' && parts[2] === 'requests' && parts[4] === 'decision' && req.method === 'PUT') return send(req, res, 200, await decideCourseRequest(Number(parts[3]), await readBody(req)));

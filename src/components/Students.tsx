@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Search, Plus, Edit, Eye, Trash2, Filter } from 'lucide-react';
 import StudentModal from './StudentModal';
 import { useApiResource } from '../hooks/useApiResource';
 import { AppUser, canDelete, canManage, isVisibleForUser, scopeLabel } from '../access';
+import { apiRequest } from '../api';
 
 type StudentsProps = {
   user: AppUser;
@@ -13,11 +14,18 @@ const Students: React.FC<StudentsProps> = ({ user }) => {
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterGrade, setFilterGrade] = useState('');
+  const [academic, setAcademic] = useState<any>({ academicYears: [], grades: [], sections: [] });
   const { items: students, loading, error, save, remove } = useApiResource<any>('students');
   const { items: teachers } = useApiResource<any>('teachers');
   const canWrite = canManage(user.role, 'students');
   const canRemove = canDelete(user.role);
   const visibleStudents = students.filter((student) => isVisibleForUser(user, student, 'students'));
+
+  useEffect(() => {
+    apiRequest<any>('/academic-structure?institutionId=' + String(user.institutionId || 1))
+      .then(setAcademic)
+      .catch(() => setAcademic({ academicYears: [], grades: [], sections: [] }));
+  }, [user.institutionId]);
 
   const filteredStudents = visibleStudents.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -133,7 +141,7 @@ const Students: React.FC<StudentsProps> = ({ user }) => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{student.grade}</div>
-                    <div className="text-sm text-gray-500">{student.age} years old</div>
+                    <div className="text-sm text-gray-500">{student.sectionName ? 'Section ' + student.sectionName + ' - ' : ''}{student.age} years old</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{student.guardianName}</div>
@@ -219,6 +227,9 @@ const Students: React.FC<StudentsProps> = ({ user }) => {
         <StudentModal
           student={selectedStudent}
           teachers={teachers.filter((teacher) => !user.institutionId || !teacher.institutionId || Number(teacher.institutionId) === Number(user.institutionId))}
+          academicYears={academic.academicYears}
+          grades={academic.grades}
+          sections={academic.sections}
           onClose={() => setShowModal(false)}
           onSave={async (studentData) => {
             if (!canWrite) {
