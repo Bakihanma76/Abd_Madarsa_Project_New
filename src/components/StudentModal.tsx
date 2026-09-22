@@ -3,13 +3,14 @@ import { X, User, Phone, Mail, Calendar, Book } from 'lucide-react';
 
 interface StudentModalProps {
   student?: any;
+  teachers?: Array<{ id: number; name: string; subject?: string; status?: string }>;
   onClose: () => void;
   onSave: (studentData: any) => void;
 }
 
 const dateInputValue = (value?: string) => value ? value.slice(0, 10) : '';
 
-const StudentModal: React.FC<StudentModalProps> = ({ student, onClose, onSave }) => {
+const StudentModal: React.FC<StudentModalProps> = ({ student, teachers = [], onClose, onSave }) => {
   const [formData, setFormData] = useState({
     name: student?.name || '',
     grade: student?.grade || '',
@@ -23,6 +24,7 @@ const StudentModal: React.FC<StudentModalProps> = ({ student, onClose, onSave })
     emergencyContact: student?.emergencyContact || '',
     medicalInfo: student?.medicalInfo || '',
     status: student?.status || 'Active',
+    assignedTeacherId: student?.assignedTeacherId ? String(student.assignedTeacherId) : '',
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -231,6 +233,22 @@ const StudentModal: React.FC<StudentModalProps> = ({ student, onClose, onSave })
                     placeholder="Any medical conditions or allergies"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Teacher</label>
+                  <select
+                    name="assignedTeacherId"
+                    value={formData.assignedTeacherId}
+                    onChange={handleChange}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  >
+                    <option value="">Select Teacher</option>
+                    {teachers.filter((teacher) => !teacher.status || teacher.status === 'Active').map((teacher) => (
+                      <option key={teacher.id} value={teacher.id}>{teacher.name}{teacher.subject ? ' - ' + teacher.subject : ''}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>

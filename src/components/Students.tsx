@@ -14,6 +14,7 @@ const Students: React.FC<StudentsProps> = ({ user }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterGrade, setFilterGrade] = useState('');
   const { items: students, loading, error, save, remove } = useApiResource<any>('students');
+  const { items: teachers } = useApiResource<any>('teachers');
   const canWrite = canManage(user.role, 'students');
   const canRemove = canDelete(user.role);
   const visibleStudents = students.filter((student) => isVisibleForUser(user, student, 'students'));
@@ -117,7 +118,7 @@ const Students: React.FC<StudentsProps> = ({ user }) => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grade & Age</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Guardian Contact</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subjects</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Teacher</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -147,8 +148,9 @@ const Students: React.FC<StudentsProps> = ({ user }) => {
                       {student.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {student.subjects} subjects
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{student.assignedTeacherName || 'Not assigned'}</div>
+                    <div className="text-sm text-gray-500">{student.assignedCourseName || 'Course pending'}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex items-center space-x-2">
@@ -216,13 +218,14 @@ const Students: React.FC<StudentsProps> = ({ user }) => {
       {showModal && (
         <StudentModal
           student={selectedStudent}
+          teachers={teachers.filter((teacher) => !user.institutionId || !teacher.institutionId || Number(teacher.institutionId) === Number(user.institutionId))}
           onClose={() => setShowModal(false)}
           onSave={async (studentData) => {
             if (!canWrite) {
               setShowModal(false);
               return;
             }
-            await save(selectedStudent?.id, { ...studentData, institutionId: user.institutionId || 1 });
+            await save(selectedStudent?.id, { ...studentData, institutionId: user.institutionId || 1, assignedBy: user.name });
             setShowModal(false);
           }}
         />

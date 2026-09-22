@@ -464,16 +464,92 @@ const decideVerification = async (type, id, body) => {
   throw new Error('Unknown verification type');
 };
 
+const studentList = async () => rows(`
+  SELECT
+    students.*,
+    assignments.teacherId AS assignedTeacherId,
+    assignments.teacherName AS assignedTeacherName,
+    assignments.courseId AS assignedCourseId,
+    assignments.courseName AS assignedCourseName
+  FROM students
+  LEFT JOIN (
+    SELECT a.*
+    FROM student_teacher_assignments a
+    JOIN (
+      SELECT institutionId, studentId, MAX(id) AS id
+      FROM student_teacher_assignments
+      WHERE status = 'Active'
+      GROUP BY institutionId, studentId
+    ) latest ON latest.id = a.id
+  ) assignments ON assignments.institutionId = students.institutionId AND assignments.studentId = students.id
+  ORDER BY students.id DESC
+`);
+
+const saveStudent = async (id, body) => {
+  const studentData = normalize(resources.students, body);
+  const assignedTeacherId = Number(body.assignedTeacherId || 0);
+  if (!assignedTeacherId) throw new Error('Assigned teacher is required for student admission');
+
+  const [teacher] = await rows(
+    'SELECT id, name FROM teachers WHERE institutionId = :institutionId AND id = :teacherId AND status = :status LIMIT 1',
+    { institutionId: Number(studentData.institutionId || 1), teacherId: assignedTeacherId, status: 'Active' },
+  );
+  if (!teacher) throw new Error('Active assigned teacher not found');
+
+  const saved = id ? await update('students', id, studentData) : await insert('students', studentData);
+  await rows(
+    `UPDATE student_teacher_assignments
+     SET status = 'Inactive'
+     WHERE institutionId = :institutionId AND studentId = :studentId AND status = 'Active'`,
+    { institutionId: saved.institutionId, studentId: saved.id },
+  );
+  await createStudentTeacherAssignment({
+    institutionId: saved.institutionId,
+    studentId: saved.id,
+    teacherId: assignedTeacherId,
+    courseId: body.assignedCourseId ? Number(body.assignedCourseId) : null,
+    assignedBy: String(body.assignedBy || 'Principal').trim(),
+    notes: id ? 'Teacher assignment updated from student profile' : 'Initial teacher assignment from admission',
+  });
+
+  return (await rows(
+    `SELECT students.*, assignments.teacherId AS assignedTeacherId, assignments.teacherName AS assignedTeacherName, assignments.courseId AS assignedCourseId, assignments.courseName AS assignedCourseName
+     FROM students
+     LEFT JOIN student_teacher_assignments assignments ON assignments.institutionId = students.institutionId AND assignments.studentId = students.id AND assignments.status = 'Active'
+     WHERE students.id = :id
+     ORDER BY assignments.id DESC
+     LIMIT 1`,
+    { id: saved.id },
+  ))[0] || saved;
+};
+
 const courseFlow = async (url) => {
   const institutionId = Number(url.searchParams.get('institutionId') || 1);
-  const [studentRows, teacherRows, courseRows, requestRows, assignmentRows] = await Promise.all([
-    rows(
-      `SELECT id, name, grade, guardianName, status
+  const role = url.searchParams.get('role') || 'principal';
+  const teacherName = url.searchParams.get('teacherName') || '';
+  const teacherOnly = role === 'teacher' && teacherName;
+  const studentSql = teacherOnly
+    ? `SELECT DISTINCT students.id, students.name, students.grade, students.guardianName, students.status
+       FROM students
+       JOIN student_teacher_assignments assignments ON assignments.institutionId = students.institutionId AND assignments.studentId = students.id AND assignments.status = 'Active'
+       WHERE students.institutionId = :institutionId AND students.status = 'Active' AND assignments.teacherName = :teacherName
+       ORDER BY students.name`
+    : `SELECT id, name, grade, guardianName, status
        FROM students
        WHERE institutionId = :institutionId AND status = 'Active'
-       ORDER BY name`,
-      { institutionId },
-    ),
+       ORDER BY name`;
+  const courseSql = teacherOnly
+    ? `SELECT id, name, grade, teacher, status
+       FROM courses
+       WHERE institutionId = :institutionId AND status = 'Active' AND teacher = :teacherName
+       ORDER BY name`
+    : `SELECT id, name, grade, teacher, status
+       FROM courses
+       WHERE institutionId = :institutionId AND status = 'Active'
+       ORDER BY name`;
+  const scopedParams = teacherOnly ? { institutionId, teacherName } : { institutionId };
+  const [studentRows, teacherRows, courseRows, requestRows, assignmentRows] = await Promise.all([
+    rows(studentSql, scopedParams),
     rows(
       `SELECT id, name, subject, status
        FROM teachers
@@ -481,13 +557,7 @@ const courseFlow = async (url) => {
        ORDER BY name`,
       { institutionId },
     ),
-    rows(
-      `SELECT id, name, grade, teacher, status
-       FROM courses
-       WHERE institutionId = :institutionId AND status = 'Active'
-       ORDER BY name`,
-      { institutionId },
-    ),
+    rows(courseSql, scopedParams),
     rows(
       `SELECT *
        FROM student_course_requests
@@ -525,15 +595,26 @@ const createCourseRequest = async (body) => {
   if (!student) throw new Error('Active student not found');
 
   const [course] = await rows(
-    'SELECT id, name FROM courses WHERE institutionId = :institutionId AND id = :courseId AND status = :status LIMIT 1',
+    'SELECT id, name, teacher FROM courses WHERE institutionId = :institutionId AND id = :courseId AND status = :status LIMIT 1',
     { institutionId, courseId, status: 'Active' },
   );
   if (!course) throw new Error('Active course not found');
+  if (course.teacher !== teacherName) throw new Error('Teacher can request only courses assigned to their competency');
 
   const [teacher] = await rows(
     'SELECT id, name FROM teachers WHERE institutionId = :institutionId AND name = :teacherName AND status = :status LIMIT 1',
     { institutionId, teacherName, status: 'Active' },
   );
+  if (!teacher) throw new Error('Active teacher not found');
+
+  const [assignment] = await rows(
+    `SELECT id
+     FROM student_teacher_assignments
+     WHERE institutionId = :institutionId AND studentId = :studentId AND teacherId = :teacherId AND status = 'Active'
+     LIMIT 1`,
+    { institutionId, studentId, teacherId: teacher.id },
+  );
+  if (!assignment) throw new Error('Teacher can request courses only for assigned students');
 
   const request = await insert('student_course_requests', {
     institutionId,
@@ -880,6 +961,9 @@ createServer(async (req, res) => {
     if (!resource) return send(req, res, 404, { error: 'Unknown resource' });
 
     const id = parts[2] ? Number(parts[2]) : null;
+    if (parts[1] === 'students' && req.method === 'GET' && !id) return send(req, res, 200, await studentList());
+    if (parts[1] === 'students' && req.method === 'POST') return send(req, res, 201, await saveStudent(null, await readBody(req)));
+    if (parts[1] === 'students' && req.method === 'PUT' && id) return send(req, res, 200, await saveStudent(id, await readBody(req)));
     if (req.method === 'GET' && !id) return send(req, res, 200, await all(resource.table));
     if (req.method === 'GET' && id) return send(req, res, 200, await one(resource.table, id));
     if (req.method === 'POST') return send(req, res, 201, await insert(resource.table, normalize(resource, await readBody(req))));

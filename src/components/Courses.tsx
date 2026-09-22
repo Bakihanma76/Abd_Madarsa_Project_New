@@ -71,7 +71,12 @@ const Courses: React.FC<CoursesProps> = ({ user }) => {
     if (!canUseCourseFlow) return;
     setFlowError('');
     try {
-      const result = await apiRequest<CourseFlowData>('/student-course-flow?institutionId=' + String(user.institutionId || 1));
+      const params = new URLSearchParams({
+        institutionId: String(user.institutionId || 1),
+        role: user.role,
+        teacherName: user.linkedTeacherName || user.name,
+      });
+      const result = await apiRequest<CourseFlowData>('/student-course-flow?' + params.toString());
       setFlow(result);
       if (!requestStudentId && result.students[0]) setRequestStudentId(String(result.students[0].id));
       if (!requestCourseId && result.courses[0]) setRequestCourseId(String(result.courses[0].id));
@@ -247,7 +252,8 @@ const Courses: React.FC<CoursesProps> = ({ user }) => {
                 </SelectField>
               </div>
               <TextField label="Reason" value={requestReason} onChange={setRequestReason} placeholder="Why this student needs this course" />
-              <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors">Send to Principal</button>
+              <button type="submit" disabled={!flow.students.length || !flow.courses.length} className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">Send to Principal</button>
+              {(!flow.students.length || !flow.courses.length) && <p className="text-sm text-amber-700">Principal must assign students and active courses to this teacher before course requests can be sent.</p>}
             </form>
           )}
 
